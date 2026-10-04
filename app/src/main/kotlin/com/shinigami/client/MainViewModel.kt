@@ -118,6 +118,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onPageStarted() {
+        if (!isConnectedToNetwork) return
+        isPageFinishedLoading = false
+        _uiState.update { currentState ->
+            currentState.copy(isLoading = true)
+        }
+    }
+
     fun onPageFinished() {
         if (!isConnectedToNetwork) return
         isPageFinishedLoading = true

@@ -158,8 +158,9 @@ class MainActivity : ComponentActivity() {
             window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+            val isImeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
             val imeInsets = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
-            imeBottomPadding = imeInsets.bottom
+            imeBottomPadding = if (isImeVisible) imeInsets.bottom else 0
             insets
         }
     }
@@ -411,6 +412,12 @@ class MainActivity : ComponentActivity() {
         }
 
         private fun isInternalNavigation(url: String): Boolean = url.contains("accounts.google.com") || url.contains("shinigami") || url.contains("shngm")
+
+        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+            super.onPageStarted(view, url, favicon)
+            val activity = activityRef.get() ?: return
+            activity.viewModel.onPageStarted()
+        }
 
         override fun onPageFinished(view: WebView, url: String) {
             val activity = activityRef.get() ?: return

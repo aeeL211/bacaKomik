@@ -19,8 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -80,18 +79,17 @@ fun MainScreen(
             .background(DarkBackground)
             .padding(bottom = imeBottomDp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pullToRefresh(
-                    state = pullToRefreshState,
-                    isRefreshing = isRefreshing,
-                    onRefresh = {
-                        webExtension.clearCache()
-                        currentWebView?.reload()
-                    },
-                    enabled = canRefresh,
-                ),
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                if (canRefresh) {
+                    webExtension.clearCache()
+                    viewModel.onPageStarted()
+                    currentWebView?.reload()
+                }
+            },
+            state = pullToRefreshState,
+            modifier = Modifier.fillMaxSize(),
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -140,12 +138,6 @@ fun MainScreen(
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
-            )
-
-            PullToRefreshDefaults.Indicator(
-                state = pullToRefreshState,
-                isRefreshing = isRefreshing,
-                modifier = Modifier.align(Alignment.TopCenter),
             )
         }
 
