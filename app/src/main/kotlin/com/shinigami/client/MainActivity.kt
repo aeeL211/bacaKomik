@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     fun configureWebSettings(webView: WebView) {
+        webView.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -309,7 +310,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun openPopupWebView(url: String) {
-        val newWebView = WebView(this).apply {
+        val newWebView = NestedScrollWebView(this).apply {
             configureWebSettings(this)
             webViewClient = DefaultWebViewClient(this@MainActivity)
             webChromeClient = DefaultWebChromeClient(this@MainActivity)
@@ -482,7 +483,7 @@ class MainActivity : ComponentActivity() {
 
         override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
             val activity = activityRef.get() ?: return false
-            val newWebView = WebView(activity).apply {
+            val newWebView = NestedScrollWebView(activity).apply {
                 activity.configureWebSettings(this)
                 webViewClient = DefaultWebViewClient(activity)
                 webChromeClient = this@DefaultWebChromeClient

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 
 val SurfaceDark = Color(0xFF121212)
 val SurfaceContainerDark = Color(0xFF1E1E1E)
@@ -97,6 +98,7 @@ fun InfoDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = true),
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(16.dp),
         title = {
@@ -133,6 +135,7 @@ fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onNo,
+        properties = DialogProperties(usePlatformDefaultWidth = true),
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(16.dp),
         title = {
@@ -180,6 +183,7 @@ fun PromptDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
+        properties = DialogProperties(usePlatformDefaultWidth = true),
         containerColor = SurfaceDark,
         shape = RoundedCornerShape(16.dp),
         title = {
