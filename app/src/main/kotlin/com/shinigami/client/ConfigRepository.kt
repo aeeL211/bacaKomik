@@ -1,9 +1,6 @@
-package com.shinigami.client.feature.komik.data
+package com.shinigami.client
 
 import android.content.SharedPreferences
-import com.shinigami.client.core.util.AppConfig
-import com.shinigami.client.core.util.Logger
-import com.shinigami.client.core.webview.WebExtension
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -22,7 +19,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
                 .build()
 
             val fetchedUrl = WebExtension.sharedHttpClient.newCall(request).execute().use { response ->
-                response.body?.string()?.trim()?.takeIf { it.startsWith("http") }
+                response.body.string().trim().takeIf { it.startsWith("http") }
             }
 
             if (fetchedUrl != null) {

@@ -1,5 +1,7 @@
-package com.shinigami.client.core.ui.components
+package com.shinigami.client
 
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,16 +21,75 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shinigami.client.core.ui.theme.OnSurface
-import com.shinigami.client.core.ui.theme.OnSurfaceVariant
-import com.shinigami.client.core.ui.theme.PrimaryAccent
-import com.shinigami.client.core.ui.theme.SurfaceDark
+
+val SurfaceDark = Color(0xFF121212)
+val SurfaceContainerDark = Color(0xFF1E1E1E)
+val OnSurface = Color(0xFFE6E1E5)
+val OnSurfaceVariant = Color(0xFFCAC4D0)
+val PrimaryAccent = Color(0xFFD0BCFF)
+val Hint = Color(0xFF938F96)
+val ImgPlaceholderTint = Color(0xFF605D62)
+
+sealed interface DialogType {
+    data class Alert(val message: String, val result: JsResult) : DialogType
+    data class Confirm(val message: String, val result: JsResult) : DialogType
+    data class Prompt(val message: String, val defaultValue: String, val result: JsPromptResult) : DialogType
+}
 
 @Composable
-fun ShinigamiInfoDialog(
+fun AppDialog(
+    dialogType: DialogType,
+    onDismiss: () -> Unit,
+) {
+    when (dialogType) {
+        is DialogType.Alert -> {
+            InfoDialog(
+                title = "Informasi",
+                message = dialogType.message,
+                onDismiss = {
+                    dialogType.result.confirm()
+                    onDismiss()
+                },
+            )
+        }
+        is DialogType.Confirm -> {
+            ConfirmDialog(
+                title = "Konfirmasi",
+                message = dialogType.message,
+                onYes = {
+                    dialogType.result.confirm()
+                    onDismiss()
+                },
+                onNo = {
+                    dialogType.result.cancel()
+                    onDismiss()
+                },
+            )
+        }
+        is DialogType.Prompt -> {
+            PromptDialog(
+                title = "Input",
+                message = dialogType.message,
+                defaultInput = dialogType.defaultValue,
+                onDone = { text ->
+                    dialogType.result.confirm(text)
+                    onDismiss()
+                },
+                onCancel = {
+                    dialogType.result.cancel()
+                    onDismiss()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+fun InfoDialog(
     title: String,
     message: String,
     buttonText: String = "OK",
@@ -62,7 +123,7 @@ fun ShinigamiInfoDialog(
 }
 
 @Composable
-fun ShinigamiConfirmDialog(
+fun ConfirmDialog(
     title: String,
     message: String,
     yesText: String = "OK",
@@ -103,7 +164,7 @@ fun ShinigamiConfirmDialog(
 }
 
 @Composable
-fun ShinigamiPromptDialog(
+fun PromptDialog(
     title: String,
     message: String,
     defaultInput: String = "",

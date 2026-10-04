@@ -11,7 +11,7 @@
 }
 
 # Keep WebExtension JavascriptInterface host object
--keep class com.shinigami.client.core.webview.WebExtension$** { *; }
+-keep class com.shinigami.client.WebExtension$** { *; }
 
 # Keep Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}

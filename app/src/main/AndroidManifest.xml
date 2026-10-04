@@ -26,11 +26,6 @@
         android:usesCleartextTraffic="true"
         tools:ignore="NewApi">
 
-        <activity
-            android:name=".ui.DebugActivity"
-            android:screenOrientation="portrait"
-            android:theme="@style/AppTheme.DebugActivity" />
-
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="com.shinigami.client.androidx-startup"
@@ -44,7 +39,7 @@
         </provider>
 
         <activity
-            android:name=".feature.komik.ui.KomikActivity"
+            android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:exported="true"
             android:hardwareAccelerated="true"

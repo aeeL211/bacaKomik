@@ -1,11 +1,9 @@
-package com.shinigami.client.feature.komik.ui
+package com.shinigami.client
 
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.shinigami.client.core.network.NetworkMonitor
-import com.shinigami.client.feature.komik.data.ConfigRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,15 +13,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class KomikViewModel(application: Application) : AndroidViewModel(application) {
+data class MainState(
+    val url: String? = null,
+    val isLoading: Boolean = true,
+    val loadingProgress: Int = 0,
+    val isSplashVisible: Boolean = true,
+    val shouldReload: Boolean = false,
+)
+
+class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val networkMonitor = NetworkMonitor(application)
     private val configRepository = ConfigRepository(
         application.getSharedPreferences("Shinigami", Context.MODE_PRIVATE),
     )
 
-    private val _uiState = MutableStateFlow(KomikUiState())
-    val uiState: StateFlow<KomikUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(MainState())
+    val uiState: StateFlow<MainState> = _uiState.asStateFlow()
 
     val defaultHeaders: Map<String, String> = mapOf("Accept-Language" to Locale.getDefault().language)
 

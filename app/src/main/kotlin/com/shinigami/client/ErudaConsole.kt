@@ -1,7 +1,6 @@
-package com.shinigami.client.core.webview
+package com.shinigami.client
 
 import android.webkit.WebView
-import com.shinigami.client.core.util.AppConfig
 
 object ErudaConsole {
 

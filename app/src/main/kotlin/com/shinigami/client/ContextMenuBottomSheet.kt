@@ -1,4 +1,4 @@
-package com.shinigami.client.core.ui.components
+package com.shinigami.client
 
 import android.app.DownloadManager
 import android.content.ClipData
@@ -65,15 +65,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.shinigami.client.R
-import com.shinigami.client.core.ui.theme.Hint
-import com.shinigami.client.core.ui.theme.ImgPlaceholderTint
-import com.shinigami.client.core.ui.theme.OnSurface
-import com.shinigami.client.core.ui.theme.OnSurfaceVariant
-import com.shinigami.client.core.ui.theme.SurfaceContainerDark
-import com.shinigami.client.core.ui.theme.SurfaceDark
-import com.shinigami.client.core.util.Logger
-import com.shinigami.client.core.webview.WebExtension
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -110,7 +101,7 @@ fun ContextMenuBottomSheet(
 
                 WebExtension.sharedHttpClient.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        response.body?.byteStream()?.buffered()?.let {
+                        response.body.byteStream().buffered().let {
                             BitmapFactory.decodeStream(it)
                         }
                     } else {
@@ -151,7 +142,6 @@ fun ContextMenuBottomSheet(
                 .padding(bottom = bottomInset + 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Header: Preview Card
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = SurfaceContainerDark),
@@ -232,7 +222,6 @@ fun ContextMenuBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Image URL Chip
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -251,7 +240,6 @@ fun ContextMenuBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Row of 3 Primary Action Tiles
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -317,7 +305,6 @@ fun ContextMenuBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Secondary Actions List
             SecondaryActionRow(
                 iconRes = R.drawable.ic_photo_m3,
                 title = "Buka di popup",

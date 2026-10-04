@@ -1,11 +1,9 @@
-package com.shinigami.client.core.webview
+package com.shinigami.client
 
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import com.shinigami.client.core.util.AppConfig
-import com.shinigami.client.core.util.Logger
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Headers
@@ -140,7 +138,7 @@ class WebExtension(cacheDir: File) {
                 val contentType = response.header("Content-Type")
                 if (contentType?.contains("html", ignoreCase = true) != true) return null
 
-                val htmlContent = response.body?.string() ?: return null
+                val htmlContent = response.body.string()
 
                 val patchedContent = htmlContent.replace("is_premium:false", "is_premium:true")
 

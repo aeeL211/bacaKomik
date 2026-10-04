@@ -1,4 +1,4 @@
-package com.shinigami.client.core.network
+package com.shinigami.client
 
 import android.content.Context
 import android.net.ConnectivityManager
