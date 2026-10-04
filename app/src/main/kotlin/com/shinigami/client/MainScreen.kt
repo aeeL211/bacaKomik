@@ -1,6 +1,5 @@
-package com.shinigami.client.feature.komik.ui
+package com.shinigami.client
 
-import android.view.ViewGroup
 import android.view.MotionEvent
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -20,39 +19,38 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.shinigami.client.R
-import com.shinigami.client.core.ui.components.ContextMenuBottomSheet
-import com.shinigami.client.core.ui.components.ShinigamiConfirmDialog
-import com.shinigami.client.core.ui.components.ShinigamiInfoDialog
-import com.shinigami.client.core.ui.components.ShinigamiPromptDialog
-import com.shinigami.client.core.ui.theme.DarkBackground
-import com.shinigami.client.core.ui.theme.SplashGradientBottom
-import com.shinigami.client.core.ui.theme.SplashGradientTop
-import com.shinigami.client.core.ui.theme.SplashProgress
-import com.shinigami.client.core.ui.theme.SplashProgressTrack
-import com.shinigami.client.core.webview.WebExtension
 import java.util.Locale
+
+private val DarkBackground = Color(0xFF121212)
+private val SplashGradientTop = Color(0xFF18181B)
+private val SplashGradientBottom = Color(0xFF09090B)
+private val SplashProgress = Color(0xFFD0BCFF)
+private val SplashProgressTrack = Color(0xFF27272A)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KomikScreen(
-    viewModel: KomikViewModel,
-    activity: KomikActivity,
+fun MainScreen(
+    viewModel: MainViewModel,
+    activity: MainActivity,
     webExtension: WebExtension,
     mainWebViewState: WebView?,
     onMainWebViewCreated: (WebView) -> Unit,
@@ -61,7 +59,7 @@ fun KomikScreen(
     showContextMenuUrl: String?,
     onDismissContextMenu: () -> Unit,
     onOpenPopupWebView: (String) -> Unit,
-    activeDialog: DialogState?,
+    activeDialog: DialogType?,
     onDismissDialog: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -71,81 +69,85 @@ fun KomikScreen(
         with(density) { activity.imeBottomPadding.toDp() }
     }
 
+    var canRefresh by remember { mutableStateOf(true) }
+    var currentWebView by remember { mutableStateOf<WebView?>(null) }
+    val isRefreshing = uiState.isLoading && !uiState.isSplashVisible
+    val pullToRefreshState = rememberPullToRefreshState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
             .padding(bottom = imeBottomDp),
     ) {
-        AndroidView(
-            factory = { ctx ->
-                val swipeRefresh = SwipeRefreshLayout(ctx)
-                val webView = WebView(ctx).apply {
-                    activity.configureWebSettings(this)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullToRefresh(
+                    state = pullToRefreshState,
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        webExtension.clearCache()
+                        currentWebView?.reload()
+                    },
+                    enabled = canRefresh,
+                ),
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        activity.configureWebSettings(this)
 
-                    webExtension.setLanguage(Locale.getDefault().toLanguageTag())
-                    webExtension.setUserAgent(settings.userAgentString)
+                        webExtension.setLanguage(Locale.getDefault().toLanguageTag())
+                        webExtension.setUserAgent(settings.userAgentString)
 
-                    CookieManager.getInstance().let { cookieManager ->
-                        cookieManager.setAcceptCookie(true)
-                        cookieManager.setAcceptThirdPartyCookies(this, true)
-                    }
-
-                    webViewClient = KomikActivity.DefaultWebViewClient(activity)
-                    webChromeClient = KomikActivity.DefaultWebChromeClient(activity)
-
-                    setOnTouchListener { _, event ->
-                        if (event.action == MotionEvent.ACTION_DOWN) {
-                            activity.touchXCoordinate = event.x.toInt()
-                            activity.touchYCoordinate = event.y.toInt()
+                        CookieManager.getInstance().let { cookieManager ->
+                            cookieManager.setAcceptCookie(true)
+                            cookieManager.setAcceptThirdPartyCookies(this, true)
                         }
-                        false
+
+                        webViewClient = MainActivity.DefaultWebViewClient(activity)
+                        webChromeClient = MainActivity.DefaultWebChromeClient(activity)
+
+                        setOnTouchListener { _, event ->
+                            if (event.action == MotionEvent.ACTION_DOWN) {
+                                activity.touchXCoordinate = event.x.toInt()
+                                activity.touchYCoordinate = event.y.toInt()
+                            }
+                            false
+                        }
+
+                        setOnLongClickListener {
+                            activity.detectImageElement()
+                            true
+                        }
+
+                        setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                            canRefresh = (scrollY == 0)
+                        }
+
+                        currentWebView = this
+                        onMainWebViewCreated(this)
                     }
-
-                    setOnLongClickListener {
-                        activity.detectImageElement()
-                        true
-                    }
-
-                    setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                        swipeRefresh.isEnabled = (scrollY == 0)
-                    }
-                }
-
-                swipeRefresh.addView(
-                    webView,
-                    ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    ),
-                )
-
-                swipeRefresh.setOnRefreshListener {
-                    webExtension.clearCache()
-                    webView.reload()
-                }
-
-                onMainWebViewCreated(webView)
-                swipeRefresh
-            },
-            update = { swipeRefresh ->
-                swipeRefresh.isRefreshing = uiState.isLoading && !uiState.isSplashVisible
-                val webView = (0 until swipeRefresh.childCount)
-                    .map { swipeRefresh.getChildAt(it) }
-                    .filterIsInstance<WebView>()
-                    .firstOrNull() ?: mainWebViewState
-
-                if (webView != null) {
+                },
+                update = { webView ->
+                    currentWebView = webView
                     if (uiState.url != null && webView.url == null) {
                         webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
                     } else if (uiState.shouldReload) {
                         viewModel.onReloadHandled()
                         webView.reload()
                     }
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            PullToRefreshDefaults.Indicator(
+                state = pullToRefreshState,
+                isRefreshing = isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
 
         if (popupWebViewState != null) {
             Box(
@@ -160,7 +162,6 @@ fun KomikScreen(
             }
         }
 
-        // Splash screen overlay
         AnimatedVisibility(
             visible = uiState.isSplashVisible,
             exit = fadeOut(animationSpec = tween(durationMillis = 500)),
@@ -211,54 +212,13 @@ fun KomikScreen(
             }
         }
 
-        // Dialogs
-        when (activeDialog) {
-            is DialogState.Info -> {
-                ShinigamiInfoDialog(
-                    title = activeDialog.title,
-                    message = activeDialog.message,
-                    buttonText = activeDialog.buttonText,
-                    onDismiss = {
-                        activeDialog.onDone?.invoke()
-                        onDismissDialog()
-                    },
-                )
-            }
-            is DialogState.Confirm -> {
-                ShinigamiConfirmDialog(
-                    title = activeDialog.title,
-                    message = activeDialog.message,
-                    yesText = activeDialog.yesText,
-                    noText = activeDialog.noText,
-                    onYes = {
-                        activeDialog.onYes()
-                        onDismissDialog()
-                    },
-                    onNo = {
-                        activeDialog.onNo?.invoke()
-                        onDismissDialog()
-                    },
-                )
-            }
-            is DialogState.Prompt -> {
-                ShinigamiPromptDialog(
-                    title = activeDialog.title,
-                    message = activeDialog.message,
-                    defaultInput = activeDialog.defaultInput,
-                    onDone = { input ->
-                        activeDialog.onDone(input)
-                        onDismissDialog()
-                    },
-                    onCancel = {
-                        activeDialog.onCancel?.invoke()
-                        onDismissDialog()
-                    },
-                )
-            }
-            null -> {}
+        if (activeDialog != null) {
+            AppDialog(
+                dialogType = activeDialog,
+                onDismiss = onDismissDialog,
+            )
         }
 
-        // Context Menu Bottom Sheet
         if (showContextMenuUrl != null) {
             ContextMenuBottomSheet(
                 url = showContextMenuUrl,

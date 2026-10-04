@@ -1,4 +1,4 @@
-package com.shinigami.client.core.webview
+package com.shinigami.client
 
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
