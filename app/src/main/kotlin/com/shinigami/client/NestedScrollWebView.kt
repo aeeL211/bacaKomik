@@ -51,8 +51,14 @@ class NestedScrollWebView @JvmOverloads constructor(
 
                 val oldScrollY = scrollY
                 val returnValue = super.onTouchEvent(event)
+                val dyConsumed = scrollY - oldScrollY
+                var dyUnconsumed = deltaY - dyConsumed
 
-                if (dispatchNestedScroll(0, scrollY - oldScrollY, 0, deltaY, scrollOffset, ViewCompat.TYPE_TOUCH)) {
+                if (dyUnconsumed < 0 && canScrollVertically(-1)) {
+                    dyUnconsumed = 0
+                }
+
+                if (dispatchNestedScroll(0, dyConsumed, 0, dyUnconsumed, scrollOffset, ViewCompat.TYPE_TOUCH)) {
                     event.offsetLocation(0f, -scrollOffset[1].toFloat())
                     nestedOffsetY += scrollOffset[1]
                     lastMotionY -= scrollOffset[1]
