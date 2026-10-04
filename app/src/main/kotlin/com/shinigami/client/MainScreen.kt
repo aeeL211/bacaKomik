@@ -43,8 +43,8 @@ import java.util.Locale
 private val DarkBackground = Color(0xFF121212)
 private val SplashGradientTop = Color(0xFF18181B)
 private val SplashGradientBottom = Color(0xFF09090B)
-private val SplashProgress = Color(0xFFD0BCFF)
-private val SplashProgressTrack = Color(0xFF27272A)
+private val SplashProgress = Color(0xFF5B2FC0)
+private val SplashProgressTrack = Color(0x335B2FC0)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +95,7 @@ fun MainScreen(
         ) {
             AndroidView(
                 factory = { ctx ->
-                    WebView(ctx).apply {
+                    NestedScrollWebView(ctx).apply {
                         activity.configureWebSettings(this)
 
                         webExtension.setLanguage(Locale.getDefault().toLanguageTag())
