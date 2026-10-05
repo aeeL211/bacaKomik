@@ -82,16 +82,14 @@ fun MainScreen(
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
-                if (canRefresh) {
-                    webExtension.clearCache()
-                    viewModel.triggerManualRefresh {
-                        val webView = currentWebView
-                        if (webView != null) {
-                            if (webView.url != null) {
-                                webView.reload()
-                            } else if (uiState.url != null) {
-                                webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
-                            }
+                webExtension.clearCache()
+                viewModel.triggerManualRefresh {
+                    val webView = currentWebView
+                    if (webView != null) {
+                        if (webView.url != null) {
+                            webView.reload()
+                        } else if (uiState.url != null) {
+                            webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
                         }
                     }
                 }
