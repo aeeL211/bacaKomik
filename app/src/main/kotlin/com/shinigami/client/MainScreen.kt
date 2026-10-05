@@ -71,7 +71,7 @@ fun MainScreen(
 
     var canRefresh by remember { mutableStateOf(true) }
     var currentWebView by remember { mutableStateOf<WebView?>(null) }
-    val isRefreshing = uiState.isLoading && !uiState.isSplashVisible
+    val isRefreshing = uiState.isRefreshing
     val pullToRefreshState = rememberPullToRefreshState()
 
     Box(
@@ -84,8 +84,9 @@ fun MainScreen(
             onRefresh = {
                 if (canRefresh) {
                     webExtension.clearCache()
-                    viewModel.onPageStarted()
-                    currentWebView?.reload()
+                    viewModel.triggerManualRefresh {
+                        currentWebView?.reload()
+                    }
                 }
             },
             state = pullToRefreshState,

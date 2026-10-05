@@ -3,6 +3,7 @@ package com.shinigami.client
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.webkit.WebView
 import androidx.core.view.NestedScrollingChild3
 import androidx.core.view.NestedScrollingChildHelper
@@ -18,7 +19,10 @@ class NestedScrollWebView @JvmOverloads constructor(
         isNestedScrollingEnabled = true
     }
 
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var initialDownY = 0f
     private var lastMotionY = 0
+    private var isBeingDragged = false
     private val scrollOffset = IntArray(2)
     private val scrollConsumed = IntArray(2)
     private var nestedOffsetY = 0
@@ -29,6 +33,8 @@ class NestedScrollWebView @JvmOverloads constructor(
 
         if (action == MotionEvent.ACTION_DOWN) {
             nestedOffsetY = 0
+            initialDownY = event.y
+            isBeingDragged = false
         }
 
         val eventY = event.y.toInt()
@@ -41,12 +47,23 @@ class NestedScrollWebView @JvmOverloads constructor(
                 super.onTouchEvent(event)
             }
             MotionEvent.ACTION_MOVE -> {
+                val totalDy = event.y - initialDownY
+
+                if (!isBeingDragged) {
+                    if (totalDy > touchSlop && !canScrollVertically(-1)) {
+                        isBeingDragged = true
+                        lastMotionY = eventY
+                    }
+                }
+
                 var deltaY = lastMotionY - eventY
 
-                if (dispatchNestedPreScroll(0, deltaY, scrollConsumed, scrollOffset, ViewCompat.TYPE_TOUCH)) {
-                    deltaY -= scrollConsumed[1]
-                    event.offsetLocation(0f, -scrollOffset[1].toFloat())
-                    nestedOffsetY += scrollOffset[1]
+                if (isBeingDragged) {
+                    if (dispatchNestedPreScroll(0, deltaY, scrollConsumed, scrollOffset, ViewCompat.TYPE_TOUCH)) {
+                        deltaY -= scrollConsumed[1]
+                        event.offsetLocation(0f, -scrollOffset[1].toFloat())
+                        nestedOffsetY += scrollOffset[1]
+                    }
                 }
 
                 val oldScrollY = scrollY
@@ -58,7 +75,7 @@ class NestedScrollWebView @JvmOverloads constructor(
                     dyUnconsumed = 0
                 }
 
-                if (dispatchNestedScroll(0, dyConsumed, 0, dyUnconsumed, scrollOffset, ViewCompat.TYPE_TOUCH)) {
+                if (isBeingDragged && dispatchNestedScroll(0, dyConsumed, 0, dyUnconsumed, scrollOffset, ViewCompat.TYPE_TOUCH)) {
                     event.offsetLocation(0f, -scrollOffset[1].toFloat())
                     nestedOffsetY += scrollOffset[1]
                     lastMotionY -= scrollOffset[1]
@@ -69,6 +86,7 @@ class NestedScrollWebView @JvmOverloads constructor(
                 returnValue
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isBeingDragged = false
                 val returnValue = super.onTouchEvent(event)
                 stopNestedScroll(ViewCompat.TYPE_TOUCH)
                 returnValue

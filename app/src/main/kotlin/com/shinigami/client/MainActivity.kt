@@ -171,10 +171,10 @@ class MainActivity : ComponentActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportZoom(true)
-            builtInZoomControls = true
+            useWideViewPort = false
+            loadWithOverviewMode = false
+            setSupportZoom(false)
+            builtInZoomControls = false
             displayZoomControls = false
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
