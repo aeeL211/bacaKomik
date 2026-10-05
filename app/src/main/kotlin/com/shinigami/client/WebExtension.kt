@@ -88,7 +88,11 @@ class WebExtension(cacheDir: File) {
     }
 
     private fun checkAndEvictOnCookieChange(url: String) {
-        val host = try { Uri.parse(url).host } catch (e: Exception) { null } ?: return
+        val host = try {
+            Uri.parse(url).host
+        } catch (e: Exception) {
+            null
+        } ?: return
         if (allowedHosts.none { host == it || host.endsWith(".$it") }) return
         val cookieString = CookieManager.getInstance().getCookie(url).orEmpty()
         val newHash = hashString(cookieString)
@@ -167,7 +171,11 @@ class WebExtension(cacheDir: File) {
             cookies.forEach { cookieStr ->
                 cookieManager.setCookie(url, cookieStr)
             }
-            val host = try { Uri.parse(url).host } catch (e: Exception) { null }
+            val host = try {
+                Uri.parse(url).host
+            } catch (e: Exception) {
+                null
+            }
             if (host != null) {
                 val updatedCookieString = cookieManager.getCookie(url).orEmpty()
                 cookieHashes[host] = hashString(updatedCookieString)

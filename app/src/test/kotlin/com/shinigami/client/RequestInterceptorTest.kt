@@ -5,8 +5,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito.`when`
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
@@ -15,7 +15,7 @@ class RequestInterceptorTest {
     private fun createMockRequest(
         urlStr: String,
         methodStr: String = "GET",
-        headersMap: Map<String, String> = emptyMap()
+        headersMap: Map<String, String> = emptyMap(),
     ): android.webkit.WebResourceRequest {
         val request = mock(android.webkit.WebResourceRequest::class.java)
         val uri = android.net.Uri.parse(urlStr)

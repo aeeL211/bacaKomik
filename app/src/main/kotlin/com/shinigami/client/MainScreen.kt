@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -85,14 +85,21 @@ fun MainScreen(
                 if (canRefresh) {
                     webExtension.clearCache()
                     viewModel.triggerManualRefresh {
-                        currentWebView?.reload()
+                        val webView = currentWebView
+                        if (webView != null) {
+                            if (webView.url != null) {
+                                webView.reload()
+                            } else if (uiState.url != null) {
+                                webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
+                            }
+                        }
                     }
                 }
             },
             state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars)
+                .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(bottom = imeBottomDp),
         ) {
             AndroidView(
@@ -125,7 +132,7 @@ fun MainScreen(
                         }
 
                         setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                            canRefresh = (scrollY == 0)
+                            canRefresh = (scrollY == 0 || !canScrollVertically(-1))
                         }
 
                         currentWebView = this
@@ -150,7 +157,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(DarkBackground)
-                    .windowInsetsPadding(WindowInsets.systemBars),
+                    .windowInsetsPadding(WindowInsets.statusBars),
             ) {
                 AndroidView(
                     factory = { popupWebViewState },
@@ -168,8 +175,8 @@ fun MainScreen(
                     .fillMaxSize()
                     .background(
                         brush = Brush.verticalGradient(
-                            colors = listOf(SplashGradientTop, SplashGradientBottom)
-                        )
+                            colors = listOf(SplashGradientTop, SplashGradientBottom),
+                        ),
                     ),
                 contentAlignment = Alignment.Center,
             ) {

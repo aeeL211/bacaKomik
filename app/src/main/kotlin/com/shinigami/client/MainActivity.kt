@@ -171,8 +171,8 @@ class MainActivity : ComponentActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            useWideViewPort = false
-            loadWithOverviewMode = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
@@ -446,7 +446,7 @@ class MainActivity : ComponentActivity() {
             if (result == null || activity == null) return false
             activity.activeDialog = DialogType.Alert(
                 message = message ?: "",
-                result = result
+                result = result,
             )
             return true
         }
@@ -456,7 +456,7 @@ class MainActivity : ComponentActivity() {
             if (result == null || activity == null) return false
             activity.activeDialog = DialogType.Confirm(
                 message = message ?: "",
-                result = result
+                result = result,
             )
             return true
         }
@@ -467,7 +467,7 @@ class MainActivity : ComponentActivity() {
             activity.activeDialog = DialogType.Prompt(
                 message = message ?: "",
                 defaultValue = defaultValue ?: "",
-                result = result
+                result = result,
             )
             return true
         }
