@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,8 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -82,14 +83,17 @@ fun MainScreen(
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
-                webExtension.clearCache()
-                viewModel.triggerManualRefresh {
-                    val webView = currentWebView
-                    if (webView != null) {
-                        if (webView.url != null) {
-                            webView.reload()
-                        } else if (uiState.url != null) {
-                            webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
+                if (canRefresh) {
+                    webExtension.clearCache()
+                    viewModel.triggerManualRefresh {
+                        val webView = currentWebView
+                        if (webView != null) {
+                            webView.clearCache(true)
+                            if (webView.url != null) {
+                                webView.reload()
+                            } else if (uiState.url != null) {
+                                webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
+                            }
                         }
                     }
                 }
@@ -97,7 +101,6 @@ fun MainScreen(
             state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(bottom = imeBottomDp),
         ) {
             AndroidView(
@@ -146,7 +149,9 @@ fun MainScreen(
                         webView.reload()
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(rememberNestedScrollInteropConnection()),
             )
         }
 
@@ -154,8 +159,7 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DarkBackground)
-                    .windowInsetsPadding(WindowInsets.statusBars),
+                    .background(DarkBackground),
             ) {
                 AndroidView(
                     factory = { popupWebViewState },

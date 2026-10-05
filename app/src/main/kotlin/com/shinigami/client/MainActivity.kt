@@ -171,8 +171,8 @@ class MainActivity : ComponentActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
+            useWideViewPort = false
+            loadWithOverviewMode = false
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
@@ -460,6 +460,7 @@ class MainActivity : ComponentActivity() {
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
             if (request.isForMainFrame) {
                 Logger.w(TAG, "Main frame failed to load: ${error.description}")
+                activityRef.get()?.viewModel?.onPageFinished()
             }
         }
     }
