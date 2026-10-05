@@ -10,12 +10,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -34,7 +38,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -64,11 +67,13 @@ fun MainScreen(
     onDismissDialog: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val density = LocalDensity.current
 
-    val imeBottomDp = remember(activity.imeBottomPadding, density) {
-        with(density) { activity.imeBottomPadding.toDp() }
-    }
+    // Full screen under the status bar and camera cutout (top is not padded).
+    // Bottom (nav bar / keyboard) and sides (3-button nav in landscape) are padded.
+    // systemBars does not include the display cutout, so the waterdrop notch is covered.
+    val webViewInsets = WindowInsets.systemBars
+        .union(WindowInsets.ime)
+        .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
 
     var canRefresh by remember { mutableStateOf(true) }
     var currentWebView by remember { mutableStateOf<WebView?>(null) }
@@ -101,7 +106,7 @@ fun MainScreen(
             state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = imeBottomDp),
+                .windowInsetsPadding(webViewInsets),
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -163,7 +168,9 @@ fun MainScreen(
             ) {
                 AndroidView(
                     factory = { popupWebViewState },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(webViewInsets),
                 )
             }
         }

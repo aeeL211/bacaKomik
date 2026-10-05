@@ -87,8 +87,15 @@ class NestedScrollWebView @JvmOverloads constructor(
                 returnValue
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasPulling = isBeingDragged
                 isBeingDragged = false
                 val returnValue = super.onTouchEvent(event)
+                if (wasPulling) {
+                    // Compose's pull-to-refresh only "releases" (runs onRefresh or hides the
+                    // spinner) when it receives a fling. WebView sends none for a slow pull,
+                    // so the spinner stayed forever. Send a zero-velocity fling ourselves.
+                    dispatchNestedPreFling(0f, 0f)
+                }
                 stopNestedScroll(ViewCompat.TYPE_TOUCH)
                 returnValue
             }
