@@ -172,7 +172,7 @@ fun MainScreen(
         state = pullToRefreshState,
         isRefreshing = isRefreshing,
         modifier = Modifier.align(Alignment.TopCenter),
-        threshold = PULL_THRESHOLD,
+        maxDistance = PULL_THRESHOLD,
       )
     }
 
