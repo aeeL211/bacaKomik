@@ -83,13 +83,15 @@ fun MainScreen(
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
-                if (canRefresh) {
+                val webView = currentWebView
+                val isAtTop = webView == null || webView.scrollY == 0 || !webView.canScrollVertically(-1)
+                if (isAtTop) {
                     webExtension.clearCache()
                     viewModel.triggerManualRefresh {
-                        val webView = currentWebView
                         if (webView != null) {
                             webView.clearCache(true)
-                            if (webView.url != null) {
+                            val currentUrl = webView.url
+                            if (!currentUrl.isNullOrBlank() && currentUrl != "about:blank") {
                                 webView.reload()
                             } else if (uiState.url != null) {
                                 webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)

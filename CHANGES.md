@@ -11,10 +11,12 @@ Dialogs and modals created by websites (HTML/CSS using viewport units, `inset: 0
 
 ### Root Cause
 1. `useWideViewPort` and `loadWithOverviewMode` were set to `true` in `MainActivity.kt` (`configureWebSettings`). This caused the WebView to calculate its CSS viewport using a desktop-like layout width (980px) and scale down the rendered web content. The viewport units (`vh`/`vw`) and fixed offsets were computed relative to the scaled desktop layout dimensions, pushing centered modals upward.
-2. In `MainScreen.kt`, `PullToRefreshBox` was padded at the top using `.windowInsetsPadding(WindowInsets.statusBars)`. Since the activity uses edge-to-edge layout (`setDecorFitsSystemWindows(false)`), applying status bar top padding shifted the entire WebView top boundary down, causing a layout offset where the WebView viewport did not equal the visible display size.
+2. Legacy `android:windowFullscreen = true` flag in `themes.xml` conflicted with `WindowCompat.setDecorFitsSystemWindows(window, false)` and `windowSoftInputMode = adjustResize`, causing WindowManager to dispatch mismatched visible layout frame metrics to the WebView.
+3. In `MainScreen.kt`, `PullToRefreshBox` was padded at the top using `.windowInsetsPadding(WindowInsets.statusBars)`. Applying status bar top padding shifted the entire WebView top boundary down, causing a layout offset where the WebView viewport did not equal the visible display size.
 
 ### Fix
 - Set `useWideViewPort = false` and `loadWithOverviewMode = false` in `MainActivity.kt` (`configureWebSettings`).
+- Removed `android:windowFullscreen = true` from `AppTheme.FullScreen` in `themes.xml`.
 - Removed `.windowInsetsPadding(WindowInsets.statusBars)` from `PullToRefreshBox` and popup container in `MainScreen.kt`, allowing the WebView to fill the screen (`fillMaxSize()`) edge-to-edge while keeping IME bottom padding for keyboard adjustments.
 
 ### How to Verify on Phone
@@ -29,15 +31,18 @@ Dialogs and modals created by websites (HTML/CSS using viewport units, `inset: 0
 A plain white horizontal gap appeared at the bottom of the screen, situated between the bottom of the page content and the site's fixed bottom navigation bar.
 
 ### Root Cause
-Because `useWideViewPort = true` and `loadWithOverviewMode = true` scaled down the webpage layout to fit the screen width, the vertical height of the web content shrunk, creating a gap above the fixed bottom navigation bar. The default browser document/body background color (`#FFFFFF`) exposed itself within this height shortfall, appearing as a plain white box.
+1. `Theme.kt` was using `isSystemInDarkTheme()` to toggle between `DarkColorScheme` and `LightColorScheme`. When the user's phone was set to system Light Mode, Compose rendered a default white background (`#FFFFFF`) behind the WebView container.
+2. Because `useWideViewPort = true` and `loadWithOverviewMode = true` scaled down the webpage layout to fit the screen width, the vertical height of the web content shrunk, creating a gap above the fixed bottom navigation bar. The white background behind the container was exposed through this gap.
 
 ### Fix
-Disabling `useWideViewPort` and `loadWithOverviewMode` in `MainActivity.kt` ensured 1:1 viewport rendering matching the physical screen dimensions, eliminating the overview scaling shortfall and white body background gap.
+- Updated `Theme.kt` (`AppTheme`) to force `DarkColorScheme` (`#121212` background / `#18181B` surface) so system Light Mode settings never draw white surfaces behind the WebView or system bar spacers.
+- Disabling `useWideViewPort` and `loadWithOverviewMode` in `MainActivity.kt` ensured 1:1 viewport rendering matching the physical screen dimensions, eliminating overview scaling shortfalls.
 
 ### How to Verify on Phone
-1. Open the app and load a web page with a bottom navigation bar.
-2. Scroll through the page and examine the area above the website's bottom navigation bar.
-3. Confirm that no white box or gap appears, and that web page content fills the entire screen seamlessly without layout gaps.
+1. Ensure your phone is set to system Light Mode (or Dark Mode) and open the app.
+2. Load a web page with a bottom navigation bar.
+3. Scroll through the page and examine the area above the website's bottom navigation bar.
+4. Confirm that no white box or gap appears, and that web page content fills the entire screen seamlessly without layout gaps.
 
 ---
 
@@ -48,13 +53,13 @@ Pulling down at the top of the screen displayed the pull-to-refresh spinner, but
 
 ### Root Cause
 1. `AndroidView` holding `NestedScrollWebView` in `MainScreen.kt` was missing `Modifier.nestedScroll(rememberNestedScrollInteropConnection())`. As a result, nested scrolling touch events from `NestedScrollWebView` were not connected to Compose's `PullToRefreshBox`.
-2. `canRefresh` (`scrollY == 0 || !canScrollVertically(-1)`) was computed but not checked in the `onRefresh` callback, allowing refresh attempts while scrolled down inside page content.
+2. `onRefresh` relied on a state variable that could evaluate to `false` during overscroll/drag gestures at touch release (`ACTION_UP`), causing `onRefresh` to exit prematurely without calling `triggerManualRefresh` or `webView.reload()`, leaving `PullToRefreshBox` stuck in refreshing state.
 3. In `MainScreen.kt`, `webView.clearCache(true)` was not called before `webView.reload()`, preventing forced network reloads.
 4. In `DefaultWebViewClient.onReceivedError`, main frame load errors did not notify `viewModel.onPageFinished()`, leaving the spinner in a refreshing state if network requests failed.
 
 ### Fix
 - Added `Modifier.nestedScroll(rememberNestedScrollInteropConnection())` to `AndroidView` in `MainScreen.kt`.
-- Added a `canRefresh` guard check in `onRefresh` so refresh is only performed when at the top of the page.
+- Updated `onRefresh` in `MainScreen.kt` to inspect the WebView instance directly (`webView.scrollY == 0 || !webView.canScrollVertically(-1)`), ensuring reliable top scroll detection upon gesture release.
 - Added `webView.clearCache(true)` before `webView.reload()` in `onRefresh`.
 - Added `activityRef.get()?.viewModel?.onPageFinished()` call in `onReceivedError` for main frame errors to guarantee the refresh spinner clears on failure.
 
