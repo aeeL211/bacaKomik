@@ -16,6 +16,7 @@ import java.util.Locale
 data class MainState(
     val url: String? = null,
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val loadingProgress: Int = 0,
     val isSplashVisible: Boolean = true,
     val shouldReload: Boolean = false,
@@ -37,6 +38,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var isPageFinishedLoading: Boolean = false
     private var hangTimeoutJob: Job? = null
     private var delayDismissJob: Job? = null
+    private var refreshStartTime: Long = 0L
 
     init {
         initializeData()
@@ -126,6 +128,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun triggerManualRefresh(onReload: () -> Unit) {
+        if (_uiState.value.isRefreshing) return
+        refreshStartTime = System.currentTimeMillis()
+        _uiState.update { currentState ->
+            currentState.copy(isRefreshing = true, isLoading = true)
+        }
+        onReload()
+    }
+
     fun onPageFinished() {
         if (!isConnectedToNetwork) return
         isPageFinishedLoading = true
@@ -134,8 +145,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isSplashVisible) {
             startDelayDismissTimer()
         } else {
-            _uiState.update { currentState ->
-                currentState.copy(isLoading = false)
+            val elapsedTime = System.currentTimeMillis() - refreshStartTime
+            val minDuration = 1000L
+            val remainingDelay = if (elapsedTime < minDuration && _uiState.value.isRefreshing) {
+                minDuration - elapsedTime
+            } else {
+                0L
+            }
+
+            if (remainingDelay > 0) {
+                viewModelScope.launch {
+                    delay(remainingDelay)
+                    _uiState.update { currentState ->
+                        currentState.copy(isLoading = false, isRefreshing = false)
+                    }
+                }
+            } else {
+                _uiState.update { currentState ->
+                    currentState.copy(isLoading = false, isRefreshing = false)
+                }
             }
         }
     }
