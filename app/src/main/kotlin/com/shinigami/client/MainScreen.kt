@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -76,8 +77,7 @@ fun MainScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
-            .padding(bottom = imeBottomDp),
+            .background(DarkBackground),
     ) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -89,7 +89,10 @@ fun MainScreen(
                 }
             },
             state = pullToRefreshState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .padding(bottom = imeBottomDp),
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -145,7 +148,8 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DarkBackground),
+                    .background(DarkBackground)
+                    .windowInsetsPadding(WindowInsets.systemBars),
             ) {
                 AndroidView(
                     factory = { popupWebViewState },
