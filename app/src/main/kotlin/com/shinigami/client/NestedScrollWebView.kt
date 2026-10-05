@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.view.NestedScrollingChild3
 import androidx.core.view.NestedScrollingChildHelper
@@ -13,7 +14,18 @@ class NestedScrollWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = android.R.attr.webViewStyle,
-) : WebView(context, attrs, defStyleAttr), NestedScrollingChild3 {
+) : WebView(context, attrs, defStyleAttr),
+    NestedScrollingChild3 {
+
+    init {
+        // Tanpa ini, AndroidViewHolder Compose memasang LayoutParams default WRAP_CONTENT.
+        // Chromium WebView membaca layoutParams.height == WRAP_CONTENT sebagai "tinggi mengikuti
+        // konten", sehingga 100vh / fixed inset-0 jadi pendek: dialog dan teks tampil di atas.
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+    }
 
     private val childHelper = NestedScrollingChildHelper(this).apply {
         isNestedScrollingEnabled = true
@@ -86,8 +98,15 @@ class NestedScrollWebView @JvmOverloads constructor(
                 returnValue
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasPulling = isBeingDragged
                 isBeingDragged = false
                 val returnValue = super.onTouchEvent(event)
+                if (wasPulling) {
+                    // Compose's pull-to-refresh only "releases" (runs onRefresh or hides the
+                    // spinner) when it receives a fling. WebView sends none for a slow pull,
+                    // so the spinner stayed forever. Send a zero-velocity fling ourselves.
+                    dispatchNestedPreFling(0f, 0f)
+                }
                 stopNestedScroll(ViewCompat.TYPE_TOUCH)
                 returnValue
             }
@@ -99,15 +118,13 @@ class NestedScrollWebView @JvmOverloads constructor(
     }
 
     // NestedScrollingChild3
-    override fun startNestedScroll(axes: Int, type: Int): Boolean =
-        childHelper.startNestedScroll(axes, type)
+    override fun startNestedScroll(axes: Int, type: Int): Boolean = childHelper.startNestedScroll(axes, type)
 
     override fun stopNestedScroll(type: Int) {
         childHelper.stopNestedScroll(type)
     }
 
-    override fun hasNestedScrollingParent(type: Int): Boolean =
-        childHelper.hasNestedScrollingParent(type)
+    override fun hasNestedScrollingParent(type: Int): Boolean = childHelper.hasNestedScrollingParent(type)
 
     override fun dispatchNestedScroll(
         dxConsumed: Int,
@@ -128,8 +145,7 @@ class NestedScrollWebView @JvmOverloads constructor(
         dyUnconsumed: Int,
         offsetInWindow: IntArray?,
         type: Int,
-    ): Boolean =
-        childHelper.dispatchNestedScroll(dxConsumed, dyConsumed, dxUnconsumed, dyUnconsumed, offsetInWindow, type)
+    ): Boolean = childHelper.dispatchNestedScroll(dxConsumed, dyConsumed, dxUnconsumed, dyUnconsumed, offsetInWindow, type)
 
     override fun dispatchNestedPreScroll(
         dx: Int,
@@ -137,26 +153,22 @@ class NestedScrollWebView @JvmOverloads constructor(
         consumed: IntArray?,
         offsetInWindow: IntArray?,
         type: Int,
-    ): Boolean =
-        childHelper.dispatchNestedPreScroll(dx, dy, consumed, offsetInWindow, type)
+    ): Boolean = childHelper.dispatchNestedPreScroll(dx, dy, consumed, offsetInWindow, type)
 
     // NestedScrollingChild2 & NestedScrollingChild
     override fun setNestedScrollingEnabled(enabled: Boolean) {
         childHelper.isNestedScrollingEnabled = enabled
     }
 
-    override fun isNestedScrollingEnabled(): Boolean =
-        childHelper.isNestedScrollingEnabled
+    override fun isNestedScrollingEnabled(): Boolean = childHelper.isNestedScrollingEnabled
 
-    override fun startNestedScroll(axes: Int): Boolean =
-        childHelper.startNestedScroll(axes)
+    override fun startNestedScroll(axes: Int): Boolean = childHelper.startNestedScroll(axes)
 
     override fun stopNestedScroll() {
         childHelper.stopNestedScroll()
     }
 
-    override fun hasNestedScrollingParent(): Boolean =
-        childHelper.hasNestedScrollingParent()
+    override fun hasNestedScrollingParent(): Boolean = childHelper.hasNestedScrollingParent()
 
     override fun dispatchNestedScroll(
         dxConsumed: Int,
@@ -164,20 +176,16 @@ class NestedScrollWebView @JvmOverloads constructor(
         dxUnconsumed: Int,
         dyUnconsumed: Int,
         offsetInWindow: IntArray?,
-    ): Boolean =
-        childHelper.dispatchNestedScroll(dxConsumed, dyConsumed, dxUnconsumed, dyUnconsumed, offsetInWindow)
+    ): Boolean = childHelper.dispatchNestedScroll(dxConsumed, dyConsumed, dxUnconsumed, dyUnconsumed, offsetInWindow)
 
     override fun dispatchNestedPreScroll(
         dx: Int,
         dy: Int,
         consumed: IntArray?,
         offsetInWindow: IntArray?,
-    ): Boolean =
-        childHelper.dispatchNestedPreScroll(dx, dy, consumed, offsetInWindow)
+    ): Boolean = childHelper.dispatchNestedPreScroll(dx, dy, consumed, offsetInWindow)
 
-    override fun dispatchNestedFling(velocityX: Float, velocityY: Float, consumed: Boolean): Boolean =
-        childHelper.dispatchNestedFling(velocityX, velocityY, consumed)
+    override fun dispatchNestedFling(velocityX: Float, velocityY: Float, consumed: Boolean): Boolean = childHelper.dispatchNestedFling(velocityX, velocityY, consumed)
 
-    override fun dispatchNestedPreFling(velocityX: Float, velocityY: Float): Boolean =
-        childHelper.dispatchNestedPreFling(velocityX, velocityY)
+    override fun dispatchNestedPreFling(velocityX: Float, velocityY: Float): Boolean = childHelper.dispatchNestedPreFling(velocityX, velocityY)
 }

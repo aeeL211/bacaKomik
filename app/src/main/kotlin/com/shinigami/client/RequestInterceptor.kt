@@ -35,7 +35,7 @@ Ekstensi mengubah data akun yang dimuat setelah kamu login, jadi tanpa
 login tidak ada yang bisa diubah. Perubahan hanya terjadi di aplikasi
 kamu, tidak di server, jadi fitur yang diverifikasi langsung oleh
 server tidak ikut terbuka.
-""".trimIndent()
+    """.trimIndent()
 
     private val ANNOUNCEMENT_ITEM = """{"announcement_id":"$ANNOUNCEMENT_ID","title":"Web2APK by AeeL","content":"${ANNOUNCEMENT_CONTENT.replace("\n", "\\n").replace("\"", "\\\"")}","thumbnail_image_url":"https://assets.shngm.id/thumbnail/image/72cea7ce-532f-4fea-b83f-80a41ecc340c.jpg","publish_status":1,"created_date":"2025-11-16T05:42:09Z","created_at":"2025-11-16T05:42:09Z","updated_at":"2026-01-09T00:27:11Z"}"""
     private val ANNOUNCEMENT_DETAIL_JSON = """{"retcode":0,"message":"success","data":$ANNOUNCEMENT_ITEM}"""

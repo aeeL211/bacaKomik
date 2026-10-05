@@ -38,6 +38,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var isPageFinishedLoading: Boolean = false
     private var hangTimeoutJob: Job? = null
     private var delayDismissJob: Job? = null
+    private var refreshTimeoutJob: Job? = null
     private var refreshStartTime: Long = 0L
 
     init {
@@ -87,6 +88,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hangTimeoutJob = null
         delayDismissJob?.cancel()
         delayDismissJob = null
+        refreshTimeoutJob?.cancel()
+        refreshTimeoutJob = null
     }
 
     private fun startHangTimeoutTimer() {
@@ -121,7 +124,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPageStarted() {
-        if (!isConnectedToNetwork) return
         isPageFinishedLoading = false
         _uiState.update { currentState ->
             currentState.copy(isLoading = true)
@@ -129,41 +131,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerManualRefresh(onReload: () -> Unit) {
-        if (_uiState.value.isRefreshing) return
+        refreshTimeoutJob?.cancel()
         refreshStartTime = System.currentTimeMillis()
         _uiState.update { currentState ->
             currentState.copy(isRefreshing = true, isLoading = true)
         }
+
+        refreshTimeoutJob = viewModelScope.launch {
+            delay(10000L)
+            if (_uiState.value.isRefreshing) {
+                _uiState.update { currentState ->
+                    currentState.copy(isLoading = false, isRefreshing = false)
+                }
+            }
+        }
+
         onReload()
     }
 
     fun onPageFinished() {
-        if (!isConnectedToNetwork) return
         isPageFinishedLoading = true
         hangTimeoutJob?.cancel()
         hangTimeoutJob = null
-        if (_uiState.value.isSplashVisible) {
-            startDelayDismissTimer()
-        } else {
-            val elapsedTime = System.currentTimeMillis() - refreshStartTime
-            val minDuration = 1000L
-            val remainingDelay = if (elapsedTime < minDuration && _uiState.value.isRefreshing) {
-                minDuration - elapsedTime
-            } else {
-                0L
-            }
 
-            if (remainingDelay > 0) {
-                viewModelScope.launch {
-                    delay(remainingDelay)
-                    _uiState.update { currentState ->
-                        currentState.copy(isLoading = false, isRefreshing = false)
-                    }
-                }
-            } else {
+        val elapsedTime = System.currentTimeMillis() - refreshStartTime
+        val minDuration = 600L
+        val remainingDelay = if (elapsedTime < minDuration && _uiState.value.isRefreshing) {
+            minDuration - elapsedTime
+        } else {
+            0L
+        }
+
+        if (_uiState.value.isSplashVisible && isConnectedToNetwork) {
+            startDelayDismissTimer()
+        }
+
+        if (remainingDelay > 0) {
+            viewModelScope.launch {
+                delay(remainingDelay)
+                refreshTimeoutJob?.cancel()
+                refreshTimeoutJob = null
                 _uiState.update { currentState ->
                     currentState.copy(isLoading = false, isRefreshing = false)
                 }
+            }
+        } else {
+            refreshTimeoutJob?.cancel()
+            refreshTimeoutJob = null
+            _uiState.update { currentState ->
+                currentState.copy(isLoading = false, isRefreshing = false)
             }
         }
     }
@@ -173,6 +189,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { currentState ->
             currentState.copy(
                 isLoading = false,
+                isRefreshing = false,
                 isSplashVisible = false,
             )
         }

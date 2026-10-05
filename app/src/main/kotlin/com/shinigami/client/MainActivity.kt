@@ -57,7 +57,6 @@ class MainActivity : ComponentActivity() {
     private var lastBackPressedTime = 0L
     var touchXCoordinate = 0
     var touchYCoordinate = 0
-    var imeBottomPadding by mutableStateOf(0)
 
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = fileUploadCallback ?: return@registerForActivityResult
@@ -156,12 +155,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        }
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
-            val isImeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
-            val imeInsets = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
-            imeBottomPadding = if (isImeVisible) imeInsets.bottom else 0
-            insets
         }
     }
 
@@ -430,6 +423,7 @@ class MainActivity : ComponentActivity() {
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
             if (request.isForMainFrame) {
                 Logger.w(TAG, "Main frame failed to load: ${error.description}")
+                activityRef.get()?.viewModel?.onPageFinished()
             }
         }
     }
@@ -446,7 +440,7 @@ class MainActivity : ComponentActivity() {
             if (result == null || activity == null) return false
             activity.activeDialog = DialogType.Alert(
                 message = message ?: "",
-                result = result
+                result = result,
             )
             return true
         }
@@ -456,7 +450,7 @@ class MainActivity : ComponentActivity() {
             if (result == null || activity == null) return false
             activity.activeDialog = DialogType.Confirm(
                 message = message ?: "",
-                result = result
+                result = result,
             )
             return true
         }
@@ -467,7 +461,7 @@ class MainActivity : ComponentActivity() {
             activity.activeDialog = DialogType.Prompt(
                 message = message ?: "",
                 defaultValue = defaultValue ?: "",
-                result = result
+                result = result,
             )
             return true
         }
