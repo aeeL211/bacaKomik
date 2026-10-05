@@ -42,268 +42,125 @@ val OnSurface = Color(0xFFE6E1E5)
 val OnSurfaceVariant = Color(0xFFCAC4D0)
 val PrimaryAccent = Color(0xFFD0BCFF)
 val Hint = Color(0xFF938F96)
-val ImgPlaceholderTint = Color(0xFF605D62)
+val PlaceholderTint = Color(0xFF605D62)
 
 sealed interface DialogType {
-    data class Alert(val message: String, val result: JsResult) : DialogType
-    data class Confirm(val message: String, val result: JsResult) : DialogType
-    data class Prompt(val message: String, val defaultValue: String, val result: JsPromptResult) : DialogType
+  val message: String
+  val result: JsResult
+
+  data class Alert(override val message: String, override val result: JsResult) : DialogType
+
+  data class Confirm(override val message: String, override val result: JsResult) : DialogType
+
+  data class Prompt(
+    override val message: String,
+    val defaultValue: String,
+    override val result: JsPromptResult,
+  ) : DialogType
 }
 
+/** Themed replacement for the WebView's JS alert / confirm / prompt dialogs. */
 @Composable
 fun AppDialog(
-    dialogType: DialogType,
-    onDismiss: () -> Unit,
+  dialogType: DialogType,
+  onDismiss: () -> Unit,
 ) {
-    when (dialogType) {
-        is DialogType.Alert -> {
-            InfoDialog(
-                title = "Informasi",
-                message = dialogType.message,
-                onDismiss = {
-                    dialogType.result.confirm()
-                    onDismiss()
-                },
-            )
-        }
-        is DialogType.Confirm -> {
-            ConfirmDialog(
-                title = "Konfirmasi",
-                message = dialogType.message,
-                onYes = {
-                    dialogType.result.confirm()
-                    onDismiss()
-                },
-                onNo = {
-                    dialogType.result.cancel()
-                    onDismiss()
-                },
-            )
-        }
-        is DialogType.Prompt -> {
-            PromptDialog(
-                title = "Input",
-                message = dialogType.message,
-                defaultInput = dialogType.defaultValue,
-                onDone = { text ->
-                    dialogType.result.confirm(text)
-                    onDismiss()
-                },
-                onCancel = {
-                    dialogType.result.cancel()
-                    onDismiss()
-                },
-            )
-        }
-    }
-}
+  val prompt = dialogType as? DialogType.Prompt
+  var input by remember(dialogType) { mutableStateOf(prompt?.defaultValue.orEmpty()) }
+  val focusRequester = remember { FocusRequester() }
 
-@Composable
-fun InfoDialog(
-    title: String,
-    message: String,
-    buttonText: String = "OK",
-    onDismiss: () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
+  if (prompt != null) {
+    LaunchedEffect(dialogType) { focusRequester.requestFocus() }
+  }
+
+  val title = when (dialogType) {
+    is DialogType.Alert -> "Informasi"
+    is DialogType.Confirm -> "Konfirmasi"
+    is DialogType.Prompt -> "Input"
+  }
+  val onConfirm = {
+    if (prompt != null) prompt.result.confirm(input) else dialogType.result.confirm()
+    onDismiss()
+  }
+  val onCancel = {
+    dialogType.result.cancel()
+    onDismiss()
+  }
+
+  Dialog(
+    // Dismissing an alert counts as pressing OK; confirm and prompt count it as cancel.
+    onDismissRequest = if (dialogType is DialogType.Alert) onConfirm else onCancel,
+    properties = DialogProperties(
+      usePlatformDefaultWidth = false,
+      decorFitsSystemWindows = false,
+    ),
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black.copy(alpha = 0.6f))
+        .padding(24.dp),
+      contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(24.dp),
-            contentAlignment = Alignment.Center,
+      Surface(
+        modifier = Modifier
+          .fillMaxWidth()
+          .wrapContentHeight(),
+        shape = RoundedCornerShape(28.dp),
+        color = SurfaceDark,
+        tonalElevation = 6.dp,
+      ) {
+        Column(
+          modifier = Modifier.padding(24.dp),
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(28.dp),
-                color = SurfaceDark,
-                tonalElevation = 6.dp,
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                ) {
-                    Text(
-                        text = title,
-                        color = OnSurface,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = message,
-                        color = OnSurfaceVariant,
-                        fontSize = 14.sp,
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(text = buttonText, color = PrimaryAccent)
-                        }
-                    }
-                }
+          Text(
+            text = title,
+            color = OnSurface,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+          // Alert and confirm always show the message row; prompt hides an empty one.
+          if (dialogType.message.isNotEmpty() || prompt == null) {
+            Text(
+              text = dialogType.message,
+              color = OnSurfaceVariant,
+              fontSize = 14.sp,
+            )
+            if (prompt != null) Spacer(modifier = Modifier.height(12.dp))
+          }
+          if (prompt != null) {
+            OutlinedTextField(
+              value = input,
+              onValueChange = { input = it },
+              modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+              colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                unfocusedBorderColor = OnSurfaceVariant,
+                focusedTextColor = OnSurface,
+                unfocusedTextColor = OnSurface,
+              ),
+              singleLine = true,
+            )
+          }
+          Spacer(modifier = Modifier.height(24.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+          ) {
+            if (dialogType !is DialogType.Alert) {
+              TextButton(onClick = onCancel) {
+                Text(text = "Batal", color = OnSurfaceVariant)
+              }
             }
-        }
-    }
-}
-
-@Composable
-fun ConfirmDialog(
-    title: String,
-    message: String,
-    yesText: String = "OK",
-    noText: String = "Batal",
-    onYes: () -> Unit,
-    onNo: () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onNo,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(24.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(28.dp),
-                color = SurfaceDark,
-                tonalElevation = 6.dp,
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                ) {
-                    Text(
-                        text = title,
-                        color = OnSurface,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = message,
-                        color = OnSurfaceVariant,
-                        fontSize = 14.sp,
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = onNo) {
-                            Text(text = noText, color = OnSurfaceVariant)
-                        }
-                        TextButton(onClick = onYes) {
-                            Text(text = yesText, color = PrimaryAccent)
-                        }
-                    }
-                }
+            TextButton(onClick = onConfirm) {
+              Text(text = "OK", color = PrimaryAccent)
             }
+          }
         }
+      }
     }
-}
-
-@Composable
-fun PromptDialog(
-    title: String,
-    message: String,
-    defaultInput: String = "",
-    onDone: (String) -> Unit,
-    onCancel: () -> Unit,
-) {
-    var inputText by remember { mutableStateOf(defaultInput) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    Dialog(
-        onDismissRequest = onCancel,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(24.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(28.dp),
-                color = SurfaceDark,
-                tonalElevation = 6.dp,
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                ) {
-                    Text(
-                        text = title,
-                        color = OnSurface,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    if (message.isNotEmpty()) {
-                        Text(
-                            text = message,
-                            color = OnSurfaceVariant,
-                            fontSize = 14.sp,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryAccent,
-                            unfocusedBorderColor = OnSurfaceVariant,
-                            focusedTextColor = OnSurface,
-                            unfocusedTextColor = OnSurface,
-                        ),
-                        singleLine = true,
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = onCancel) {
-                            Text(text = "Batal", color = OnSurfaceVariant)
-                        }
-                        TextButton(onClick = { onDone(inputText) }) {
-                            Text(text = "OK", color = PrimaryAccent)
-                        }
-                    }
-                }
-            }
-        }
-    }
+  }
 }

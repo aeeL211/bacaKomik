@@ -72,338 +72,338 @@ import okhttp3.Request
 private val ContextMenuAccent = Color.White
 
 private enum class PreviewState {
-    LOADING,
-    SUCCESS,
-    ERROR,
+  LOADING,
+  SUCCESS,
+  ERROR,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextMenuBottomSheet(
-    url: String,
-    onDismissRequest: () -> Unit,
-    onOpenInPopup: (String) -> Unit,
+  url: String,
+  onDismissRequest: () -> Unit,
+  onOpenInPopup: (String) -> Unit,
 ) {
-    val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var previewState by remember { mutableStateOf(PreviewState.LOADING) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  val context = LocalContext.current
+  val haptic = LocalHapticFeedback.current
+  var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var previewState by remember { mutableStateOf(PreviewState.LOADING) }
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    LaunchedEffect(url) {
-        previewState = PreviewState.LOADING
-        val bitmap = withContext(Dispatchers.IO) {
-            try {
-                val cookie = CookieManager.getInstance().getCookie(url)
-                val requestBuilder = Request.Builder().url(url)
-                cookie?.let { requestBuilder.header("Cookie", it) }
-                val request = requestBuilder.build()
+  LaunchedEffect(url) {
+    previewState = PreviewState.LOADING
+    val bitmap = withContext(Dispatchers.IO) {
+      try {
+        val cookie = CookieManager.getInstance().getCookie(url)
+        val requestBuilder = Request.Builder().url(url)
+        cookie?.let { requestBuilder.header("Cookie", it) }
+        val request = requestBuilder.build()
 
-                WebExtension.sharedHttpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        response.body.byteStream().buffered().let {
-                            BitmapFactory.decodeStream(it)
-                        }
-                    } else {
-                        null
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.e("ContextMenuSheet", "Image preview load failed", e)
-                null
+        WebExtension.httpClient.newCall(request).execute().use { response ->
+          if (response.isSuccessful) {
+            response.body.byteStream().buffered().let {
+              BitmapFactory.decodeStream(it)
             }
+          } else {
+            null
+          }
         }
-        previewBitmap = bitmap
-        previewState = if (bitmap != null) PreviewState.SUCCESS else PreviewState.ERROR
+      } catch (e: Exception) {
+        Logger.e("ContextMenuSheet", e) { "Image preview load failed" }
+        null
+      }
     }
+    previewBitmap = bitmap
+    previewState = if (bitmap != null) PreviewState.SUCCESS else PreviewState.ERROR
+  }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(vertical = 12.dp)
-                    .width(36.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(ContextMenuAccent),
-            )
-        },
-    ) {
-        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = bottomInset + 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainerDark),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .heightIn(max = 220.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onOpenInPopup(url)
-                        onDismissRequest()
-                    },
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when (previewState) {
-                        PreviewState.LOADING -> {
-                            val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
-                            val alpha by infiniteTransition.animateFloat(
-                                initialValue = 0.2f,
-                                targetValue = 0.6f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(800, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse,
-                                ),
-                                label = "shimmerAlpha",
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(SurfaceContainerDark.copy(alpha = alpha)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(32.dp),
-                                    color = ContextMenuAccent,
-                                    strokeWidth = 3.dp,
-                                )
-                            }
-                        }
-                        PreviewState.SUCCESS -> {
-                            previewBitmap?.let { bitmap ->
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Preview",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                )
-                            }
-                        }
-                        PreviewState.ERROR -> {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(16.dp),
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_photo_m3),
-                                    contentDescription = null,
-                                    tint = ImgPlaceholderTint,
-                                    modifier = Modifier.size(40.dp),
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Gagal memuat pratinjau gambar",
-                                    color = Hint,
-                                    fontSize = 12.sp,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SurfaceContainerDark)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = url,
-                    color = OnSurfaceVariant,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                PrimaryActionTile(
-                    iconRes = R.drawable.ic_download_m3,
-                    label = "Unduh",
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        executeSafeAction(context) {
-                            val request = DownloadManager.Request(Uri.parse(url))
-                                .setTitle("Mengunduh Gambar")
-                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                .setDestinationInExternalPublicDir(
-                                    Environment.DIRECTORY_PICTURES,
-                                    "Shinigami/IMG_${System.currentTimeMillis()}.jpg",
-                                )
-
-                            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            downloadManager.enqueue(request)
-                            Toast.makeText(context, "Proses unduh dimulai...", Toast.LENGTH_SHORT).show()
-                        }
-                        onDismissRequest()
-                    },
-                )
-
-                PrimaryActionTile(
-                    iconRes = R.drawable.ic_share_m3,
-                    label = "Bagikan",
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        executeSafeAction(context) {
-                            val shareIntent = Intent.createChooser(
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, url)
-                                },
-                                "Bagikan tautan",
-                            )
-                            context.startActivity(shareIntent)
-                        }
-                        onDismissRequest()
-                    },
-                )
-
-                PrimaryActionTile(
-                    iconRes = R.drawable.ic_copy_m3,
-                    label = "Salin tautan",
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        executeSafeAction(context) {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("URL", url))
-                            Toast.makeText(context, "Tautan disalin", Toast.LENGTH_SHORT).show()
-                        }
-                        onDismissRequest()
-                    },
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SecondaryActionRow(
-                iconRes = R.drawable.ic_photo_m3,
-                title = "Buka di popup",
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onOpenInPopup(url)
-                    onDismissRequest()
-                },
-            )
-
-            SecondaryActionRow(
-                iconRes = R.drawable.ic_open_m3,
-                title = "Buka di browser",
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    executeSafeAction(context) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    }
-                    onDismissRequest()
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun PrimaryActionTile(
-    iconRes: Int,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = modifier
-            .heightIn(min = 68.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceContainerDark)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = label,
-                tint = ContextMenuAccent,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = label,
-                color = OnSurface,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SecondaryActionRow(
-    iconRes: Int,
-    title: String,
-    onClick: () -> Unit,
-) {
-    Row(
+  ModalBottomSheet(
+    onDismissRequest = onDismissRequest,
+    sheetState = sheetState,
+    containerColor = SurfaceDark,
+    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    dragHandle = {
+      Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+          .padding(vertical = 12.dp)
+          .width(36.dp)
+          .height(4.dp)
+          .clip(RoundedCornerShape(2.dp))
+          .background(ContextMenuAccent),
+      )
+    },
+  ) {
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp)
+        .padding(bottom = bottomInset + 16.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            painter = painterResource(id = iconRes),
-            contentDescription = title,
-            tint = ContextMenuAccent,
-            modifier = Modifier.size(22.dp),
-        )
-        Spacer(modifier = Modifier.width(16.dp))
+      Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceContainerDark),
+        modifier = Modifier
+          .fillMaxWidth()
+          .aspectRatio(16f / 9f)
+          .heightIn(max = 220.dp)
+          .clip(RoundedCornerShape(16.dp))
+          .clickable {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onOpenInPopup(url)
+            onDismissRequest()
+          },
+      ) {
+        Box(
+          modifier = Modifier.fillMaxSize(),
+          contentAlignment = Alignment.Center,
+        ) {
+          when (previewState) {
+            PreviewState.LOADING -> {
+              val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+              val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.2f,
+                targetValue = 0.6f,
+                animationSpec = infiniteRepeatable(
+                  animation = tween(800, easing = LinearEasing),
+                  repeatMode = RepeatMode.Reverse,
+                ),
+                label = "shimmerAlpha",
+              )
+              Box(
+                modifier = Modifier
+                  .fillMaxSize()
+                  .background(SurfaceContainerDark.copy(alpha = alpha)),
+                contentAlignment = Alignment.Center,
+              ) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(32.dp),
+                  color = ContextMenuAccent,
+                  strokeWidth = 3.dp,
+                )
+              }
+            }
+            PreviewState.SUCCESS -> {
+              previewBitmap?.let { bitmap ->
+                Image(
+                  bitmap = bitmap.asImageBitmap(),
+                  contentDescription = "Preview",
+                  modifier = Modifier.fillMaxSize(),
+                  contentScale = ContentScale.Crop,
+                )
+              }
+            }
+            PreviewState.ERROR -> {
+              Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(16.dp),
+              ) {
+                Icon(
+                  painter = painterResource(id = R.drawable.ic_photo_m3),
+                  contentDescription = null,
+                  tint = PlaceholderTint,
+                  modifier = Modifier.size(40.dp),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                  text = "Gagal memuat pratinjau gambar",
+                  color = Hint,
+                  fontSize = 12.sp,
+                  textAlign = TextAlign.Center,
+                )
+              }
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(8.dp))
+          .background(SurfaceContainerDark)
+          .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
         Text(
-            text = title,
-            color = OnSurface,
-            fontSize = 14.sp,
+          text = url,
+          color = OnSurfaceVariant,
+          fontSize = 12.sp,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
         )
+      }
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        ActionTile(
+          iconRes = R.drawable.ic_download_m3,
+          label = "Unduh",
+          modifier = Modifier.weight(1f),
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            safeAction(context) {
+              val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle("Mengunduh Gambar")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(
+                  Environment.DIRECTORY_PICTURES,
+                  "Shinigami/IMG_${System.currentTimeMillis()}.jpg",
+                )
+
+              val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+              downloadManager.enqueue(request)
+              Toast.makeText(context, "Proses unduh dimulai...", Toast.LENGTH_SHORT).show()
+            }
+            onDismissRequest()
+          },
+        )
+
+        ActionTile(
+          iconRes = R.drawable.ic_share_m3,
+          label = "Bagikan",
+          modifier = Modifier.weight(1f),
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            safeAction(context) {
+              val shareIntent = Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                  type = "text/plain"
+                  putExtra(Intent.EXTRA_TEXT, url)
+                },
+                "Bagikan tautan",
+              )
+              context.startActivity(shareIntent)
+            }
+            onDismissRequest()
+          },
+        )
+
+        ActionTile(
+          iconRes = R.drawable.ic_copy_m3,
+          label = "Salin tautan",
+          modifier = Modifier.weight(1f),
+          onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            safeAction(context) {
+              val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+              clipboard.setPrimaryClip(ClipData.newPlainText("URL", url))
+              Toast.makeText(context, "Tautan disalin", Toast.LENGTH_SHORT).show()
+            }
+            onDismissRequest()
+          },
+        )
+      }
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      ActionRow(
+        iconRes = R.drawable.ic_photo_m3,
+        title = "Buka di popup",
+        onClick = {
+          haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+          onOpenInPopup(url)
+          onDismissRequest()
+        },
+      )
+
+      ActionRow(
+        iconRes = R.drawable.ic_open_m3,
+        title = "Buka di browser",
+        onClick = {
+          haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+          safeAction(context) {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+          }
+          onDismissRequest()
+        },
+      )
     }
+  }
 }
 
-private fun executeSafeAction(context: Context, action: () -> Unit) {
-    try {
-        action()
-    } catch (e: Exception) {
-        Logger.e("ContextMenuSheet", "Action execution failed", e)
-        Toast.makeText(context, "Gagal memproses aksi tersebut", Toast.LENGTH_SHORT).show()
+@Composable
+private fun ActionTile(
+  iconRes: Int,
+  label: String,
+  modifier: Modifier = Modifier,
+  onClick: () -> Unit,
+) {
+  Box(
+    modifier = modifier
+      .heightIn(min = 68.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(SurfaceContainerDark)
+      .clickable(onClick = onClick)
+      .padding(vertical = 12.dp, horizontal = 8.dp),
+    contentAlignment = Alignment.Center,
+  ) {
+    Column(
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+    ) {
+      Icon(
+        painter = painterResource(id = iconRes),
+        contentDescription = label,
+        tint = ContextMenuAccent,
+        modifier = Modifier.size(24.dp),
+      )
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        text = label,
+        color = OnSurface,
+        fontSize = 12.sp,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
+  }
+}
+
+@Composable
+private fun ActionRow(
+  iconRes: Int,
+  title: String,
+  onClick: () -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .heightIn(min = 48.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(onClick = onClick)
+      .padding(vertical = 12.dp, horizontal = 12.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(
+      painter = painterResource(id = iconRes),
+      contentDescription = title,
+      tint = ContextMenuAccent,
+      modifier = Modifier.size(22.dp),
+    )
+    Spacer(modifier = Modifier.width(16.dp))
+    Text(
+      text = title,
+      color = OnSurface,
+      fontSize = 14.sp,
+    )
+  }
+}
+
+private fun safeAction(context: Context, action: () -> Unit) {
+  try {
+    action()
+  } catch (e: Exception) {
+    Logger.e("ContextMenuSheet", e) { "Action execution failed" }
+    Toast.makeText(context, "Gagal memproses aksi tersebut", Toast.LENGTH_SHORT).show()
+  }
 }

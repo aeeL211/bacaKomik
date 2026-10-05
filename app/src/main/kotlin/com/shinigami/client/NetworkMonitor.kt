@@ -11,39 +11,39 @@ import kotlinx.coroutines.flow.callbackFlow
 
 class NetworkMonitor(context: Context) {
 
-    private val connectivityManager =
-        context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+  private val connectivityManager =
+    context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    val networkStatus: Flow<Boolean> = callbackFlow {
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                trySend(true)
-            }
+  val networkStatus: Flow<Boolean> = callbackFlow {
+    val callback = object : ConnectivityManager.NetworkCallback() {
+      override fun onAvailable(network: Network) {
+        trySend(true)
+      }
 
-            override fun onLost(network: Network) {
-                trySend(false)
-            }
+      override fun onLost(network: Network) {
+        trySend(false)
+      }
 
-            override fun onUnavailable() {
-                trySend(false)
-            }
-        }
-
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        connectivityManager?.registerNetworkCallback(request, callback)
-        trySend(checkConnectionNow())
-
-        awaitClose {
-            connectivityManager?.unregisterNetworkCallback(callback)
-        }
+      override fun onUnavailable() {
+        trySend(false)
+      }
     }
 
-    private fun checkConnectionNow(): Boolean {
-        val activeNetwork = connectivityManager?.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    val request = NetworkRequest.Builder()
+      .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+      .build()
+
+    connectivityManager.registerNetworkCallback(request, callback)
+    trySend(isConnectedNow())
+
+    awaitClose {
+      connectivityManager.unregisterNetworkCallback(callback)
     }
+  }
+
+  private fun isConnectedNow(): Boolean {
+    val activeNetwork = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+  }
 }
