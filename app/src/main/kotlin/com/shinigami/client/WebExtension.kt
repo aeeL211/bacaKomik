@@ -144,35 +144,7 @@ class WebExtension(cacheDir: File) {
 
                 val htmlContent = response.body.string()
 
-                val cssPatch = """
-                <style id="shinigami-ui-patch">
-                .ads-wrapper, .ad-container, .ad-banner, .ad-slot, [class*="ads-wrapper"], [class*="ad-wrapper"], [class*="ad-container"], [class*="ads-container"], [class*="ad-slot"], [class*="ad-banner"], [id*="ads-"], [id*="ad-slot"], iframe[src*="ads"] {
-                    display: none !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                }
-                .fixed.inset-0, [class*="announcement"], [class*="modal-overlay"], [class*="modal_overlay"] {
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                }
-                [class*="announcement-content"], [class*="modal-content"], [class*="modal_content"] {
-                    margin: auto !important;
-                }
-                </style>
-                """.trimIndent()
-
-                val patchedContent = htmlContent
-                    .replace("is_premium:false", "is_premium:true")
-                    .let { html ->
-                        if (html.contains("</head>", ignoreCase = true)) {
-                            html.replace("</head>", "$cssPatch</head>")
-                        } else {
-                            "$cssPatch$html"
-                        }
-                    }
+                val patchedContent = htmlContent.replace("is_premium:false", "is_premium:true")
 
                 val cacheControl = response.header("Cache-Control")
 

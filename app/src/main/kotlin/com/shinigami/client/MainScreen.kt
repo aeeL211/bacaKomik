@@ -89,11 +89,9 @@ fun MainScreen(
             isRefreshing = isRefreshing,
             onRefresh = {
                 if (canRefresh) {
-                    webExtension.clearCache()
                     viewModel.triggerManualRefresh {
                         val webView = currentWebView
                         if (webView != null) {
-                            webView.clearCache(true)
                             if (webView.url != null) {
                                 webView.reload()
                             } else if (uiState.url != null) {

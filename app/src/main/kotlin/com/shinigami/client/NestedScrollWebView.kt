@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.view.NestedScrollingChild3
 import androidx.core.view.NestedScrollingChildHelper
@@ -15,6 +16,16 @@ class NestedScrollWebView @JvmOverloads constructor(
     defStyleAttr: Int = android.R.attr.webViewStyle,
 ) : WebView(context, attrs, defStyleAttr),
     NestedScrollingChild3 {
+
+    init {
+        // Tanpa ini, AndroidViewHolder Compose memasang LayoutParams default WRAP_CONTENT.
+        // Chromium WebView membaca layoutParams.height == WRAP_CONTENT sebagai "tinggi mengikuti
+        // konten", sehingga 100vh / fixed inset-0 jadi pendek: dialog dan teks tampil di atas.
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+    }
 
     private val childHelper = NestedScrollingChildHelper(this).apply {
         isNestedScrollingEnabled = true

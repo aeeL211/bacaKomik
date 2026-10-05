@@ -57,7 +57,6 @@ class MainActivity : ComponentActivity() {
     private var lastBackPressedTime = 0L
     var touchXCoordinate = 0
     var touchYCoordinate = 0
-    var imeBottomPadding by mutableStateOf(0)
 
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = fileUploadCallback ?: return@registerForActivityResult
@@ -156,12 +155,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        }
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
-            val isImeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
-            val imeInsets = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
-            imeBottomPadding = if (isImeVisible) imeInsets.bottom else 0
-            insets
         }
     }
 
@@ -422,39 +415,9 @@ class MainActivity : ComponentActivity() {
         override fun onPageFinished(view: WebView, url: String) {
             val activity = activityRef.get() ?: return
             activity.viewModel.onPageFinished()
-            injectCssFixes(view)
             if (AppConfig.ENABLE_ERUDA) {
                 ErudaConsole.inject(view)
             }
-        }
-
-        private fun injectCssFixes(view: WebView) {
-            val jsCssFix = """
-            (function() {
-                if (document.getElementById('shinigami-ui-patch-js')) return;
-                var style = document.createElement('style');
-                style.id = 'shinigami-ui-patch-js';
-                style.innerHTML = `
-                    .ads-wrapper, .ad-container, .ad-banner, .ad-slot, [class*="ads-wrapper"], [class*="ad-wrapper"], [class*="ad-container"], [class*="ads-container"], [class*="ad-slot"], [class*="ad-banner"], [id*="ads-"], [id*="ad-slot"], iframe[src*="ads"] {
-                        display: none !important;
-                        height: 0 !important;
-                        min-height: 0 !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    .fixed.inset-0, [class*="announcement"], [class*="modal-overlay"], [class*="modal_overlay"] {
-                        display: flex !important;
-                        align-items: center !important;
-                        justify-content: center !important;
-                    }
-                    [class*="announcement-content"], [class*="modal-content"], [class*="modal_content"] {
-                        margin: auto !important;
-                    }
-                `;
-                (document.head || document.documentElement).appendChild(style);
-            })();
-            """.trimIndent()
-            view.evaluateJavascript(jsCssFix, null)
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
