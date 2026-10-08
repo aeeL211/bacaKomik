@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Message
+import android.text.TextUtils
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.JsPromptResult
@@ -39,7 +40,7 @@ import java.lang.ref.WeakReference
 class MainActivity : ComponentActivity() {
 
   val viewModel: MainViewModel by viewModels()
-  val webExtension by lazy { WebExtension(cacheDir) }
+  val extension by lazy { Extension(cacheDir) }
 
   val imageDetectorJs: String by lazy {
     assets.open("js/image_detector.js").bufferedReader().use { it.readText() }
@@ -121,7 +122,7 @@ class MainActivity : ComponentActivity() {
         MainScreen(
           viewModel = viewModel,
           activity = this,
-          webExtension = webExtension,
+          extension = extension,
           onWebViewCreated = { webView ->
             mainWebView = webView
             savedInstanceState?.let { webView.restoreState(it) }
@@ -305,7 +306,18 @@ class MainActivity : ComponentActivity() {
     }
 
     popupWebView = newWebView
-    newWebView.loadUrl(url)
+    // Opening an image URL directly shows it at full pixel size (zoomed in), because the
+    // WebView has wide-viewport off. Wrap it in a page that fits the image to the screen.
+    val html = """
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        html, body { margin: 0; height: 100%; background: #121212; }
+        body { display: flex; align-items: center; justify-content: center; }
+        img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      </style>
+      <img src="${TextUtils.htmlEncode(url)}">
+    """.trimIndent()
+    newWebView.loadDataWithBaseURL(url, html, "text/html", "UTF-8", null)
   }
 
   fun dismissPopup() {
@@ -357,7 +369,6 @@ class MainActivity : ComponentActivity() {
 
     dismissPopup()
 
-    webExtension.destroy()
     super.onDestroy()
   }
 
@@ -365,15 +376,9 @@ class MainActivity : ComponentActivity() {
     private val activityRef = WeakReference(activity)
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-      RequestInterceptor.intercept(request)?.let { return it }
+      Blocker.intercept(request)?.let { return it }
 
-      val extension = activityRef.get()?.webExtension ?: return null
-
-      return if (extension.shouldIntercept(request)) {
-        extension.intercept(request)
-      } else {
-        null
-      }
+      return activityRef.get()?.extension?.intercept(request)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

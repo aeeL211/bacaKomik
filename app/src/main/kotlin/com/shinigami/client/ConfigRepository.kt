@@ -18,7 +18,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         .url(AppConfig.CONFIG_URL)
         .build()
 
-      val fetchedUrl = WebExtension.httpClient.newCall(request).execute().use { response ->
+      val fetchedUrl = Extension.httpClient.newCall(request).execute().use { response ->
         response.body.string().trim().takeIf { it.startsWith("http") }
       }
 

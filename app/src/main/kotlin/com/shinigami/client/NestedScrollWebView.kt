@@ -3,7 +3,6 @@ package com.shinigami.client
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
-import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.core.view.NestedScrollingChild3
@@ -31,8 +30,9 @@ class NestedScrollWebView @JvmOverloads constructor(
     isNestedScrollingEnabled = true
   }
 
-  private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+  private val pullStart = AppConfig.PULL_START_DP * resources.displayMetrics.density
   private var initialDownY = 0f
+  private var pullOriginY = 0f
   private var lastMotionY = 0
   private var isBeingDragged = false
   private var startedAtTop = false
@@ -53,6 +53,10 @@ class NestedScrollWebView @JvmOverloads constructor(
     val eventY = event.y.toInt()
     event.offsetLocation(0f, nestedOffsetY.toFloat())
 
+    // While pulling, the page must not see the finger below where the pull began. Otherwise
+    // moving the finger back up scrolls the page while the spinner retracts.
+    if (isBeingDragged && event.y > pullOriginY) event.offsetLocation(0f, pullOriginY - event.y)
+
     val result: Boolean = when (action) {
       MotionEvent.ACTION_DOWN -> {
         lastMotionY = eventY
@@ -63,9 +67,10 @@ class NestedScrollWebView @JvmOverloads constructor(
         val totalDy = event.y - initialDownY
 
         if (!isBeingDragged) {
-          if (totalDy > touchSlop && startedAtTop && !canScrollVertically(-1)) {
+          if (totalDy > pullStart && startedAtTop && !canScrollVertically(-1)) {
             isBeingDragged = true
             lastMotionY = eventY
+            pullOriginY = event.y
           }
         }
 

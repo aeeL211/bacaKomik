@@ -34,12 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
@@ -54,23 +51,12 @@ private val SplashGradientBottom = Color(0xFF09090B)
 private val SplashProgress = Color(0xFF5B2FC0)
 private val SplashProgressTrack = Color(0x335B2FC0)
 
-// Pull-to-refresh tuning. Adjust these two to change how hard the user has to pull.
-// Finger travel needed ~= PULL_THRESHOLD / (0.5 * DRAG_RATE), where 0.5 is Material's built-in drag factor.
-private val PULL_THRESHOLD = 120.dp // Material default is 80.dp
-private const val DRAG_RATE = 0.8f // 1f = Material feel. Lower = heavier drag, harder to trigger.
-
-/** Passes only [DRAG_RATE] of a downward pull on to pull-to-refresh; the rest is swallowed. */
-private object PullDamper : NestedScrollConnection {
-  override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
-    if (available.y > 0f) Offset(0f, available.y * (1f - DRAG_RATE)) else Offset.Zero
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
   viewModel: MainViewModel,
   activity: MainActivity,
-  webExtension: WebExtension,
+  extension: Extension,
   onWebViewCreated: (WebView) -> Unit,
   popupWebView: WebView?,
   imageMenuUrl: String?,
@@ -104,7 +90,7 @@ fun MainScreen(
         .pullToRefresh(
           isRefreshing = isRefreshing,
           state = pullToRefreshState,
-          threshold = PULL_THRESHOLD,
+          threshold = AppConfig.PULL_THRESHOLD_DP.dp,
           onRefresh = {
             val webView = currentWebView
             // Only refresh when the page is at the top.
@@ -125,8 +111,8 @@ fun MainScreen(
           NestedScrollWebView(ctx).apply {
             activity.configureWebView(this)
 
-            webExtension.setLanguage(Locale.getDefault().toLanguageTag())
-            webExtension.setUserAgent(settings.userAgentString)
+            extension.language = Locale.getDefault().toLanguageTag()
+            extension.userAgent = settings.userAgentString
 
             CookieManager.getInstance().let { cookieManager ->
               cookieManager.setAcceptCookie(true)
@@ -164,7 +150,6 @@ fun MainScreen(
         },
         modifier = Modifier
           .fillMaxSize()
-          .nestedScroll(PullDamper)
           .nestedScroll(rememberNestedScrollInteropConnection()),
       )
 
@@ -172,7 +157,7 @@ fun MainScreen(
         state = pullToRefreshState,
         isRefreshing = isRefreshing,
         modifier = Modifier.align(Alignment.TopCenter),
-        maxDistance = PULL_THRESHOLD,
+        maxDistance = AppConfig.PULL_THRESHOLD_DP.dp,
       )
     }
 

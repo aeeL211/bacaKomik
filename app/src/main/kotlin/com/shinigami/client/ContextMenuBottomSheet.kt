@@ -99,7 +99,7 @@ fun ContextMenuBottomSheet(
         cookie?.let { requestBuilder.header("Cookie", it) }
         val request = requestBuilder.build()
 
-        WebExtension.httpClient.newCall(request).execute().use { response ->
+        Extension.httpClient.newCall(request).execute().use { response ->
           if (response.isSuccessful) {
             response.body.byteStream().buffered().let {
               BitmapFactory.decodeStream(it)
