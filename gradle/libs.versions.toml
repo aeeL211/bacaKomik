@@ -12,7 +12,7 @@ junit = "4.13.2"
 mockito = "5.24.0"
 robolectric = "4.17"
 activityKtx = "1.13.0"
-spotless = "8.10.3"
+spotless = "8.10.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
