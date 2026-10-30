@@ -1,4 +1,4 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
 import android.webkit.JsPromptResult
 import android.webkit.JsResult

@@ -10,9 +10,6 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Keep WebExtension JavascriptInterface host object
--keep class com.shinigami.client.WebExtension$** { *; }
-
 # Keep Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}

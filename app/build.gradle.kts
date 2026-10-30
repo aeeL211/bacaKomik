@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-  namespace = "com.shinigami.client"
+  namespace = "aeeL.shngmWeb"
   compileSdk = 37
 
   defaultConfig {
-    applicationId = "com.shinigami.client"
+    applicationId = "aeeL.shngmWeb"
     minSdk = 24
     targetSdk = 36
     versionCode = 2
@@ -82,6 +82,7 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.okhttp)
   implementation(libs.androidx.startup)
+  implementation(libs.androidx.swiperefreshlayout)
 
   implementation(libs.material)
 

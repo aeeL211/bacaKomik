@@ -1,4 +1,4 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
 import android.content.Context
 import android.util.Log

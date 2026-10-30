@@ -1,4 +1,4 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
 import android.app.DownloadManager
 import android.content.ClipData
@@ -99,7 +99,7 @@ fun ContextMenuBottomSheet(
         cookie?.let { requestBuilder.header("Cookie", it) }
         val request = requestBuilder.build()
 
-        Extension.httpClient.newCall(request).execute().use { response ->
+        Http.client.newCall(request).execute().use { response ->
           if (response.isSuccessful) {
             response.body.byteStream().buffered().let {
               BitmapFactory.decodeStream(it)

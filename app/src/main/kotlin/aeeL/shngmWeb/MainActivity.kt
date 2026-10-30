@@ -1,4 +1,4 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -36,11 +36,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import org.json.JSONObject
 import java.lang.ref.WeakReference
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
   val viewModel: MainViewModel by viewModels()
-  val extension by lazy { Extension(cacheDir) }
+  val interceptor by lazy { RequestInterceptor() }
 
   val imageDetectorJs: String by lazy {
     assets.open("js/image_detector.js").bufferedReader().use { it.readText() }
@@ -122,7 +123,6 @@ class MainActivity : ComponentActivity() {
         MainScreen(
           viewModel = viewModel,
           activity = this,
-          extension = extension,
           onWebViewCreated = { webView ->
             mainWebView = webView
             savedInstanceState?.let { webView.restoreState(it) }
@@ -172,6 +172,9 @@ class MainActivity : ComponentActivity() {
 
       userAgentString = userAgentString.replace("; wv", "")
     }
+
+    interceptor.language = Locale.getDefault().toLanguageTag()
+    interceptor.userAgent = webView.settings.userAgentString
   }
 
   fun detectImage() {
@@ -299,7 +302,11 @@ class MainActivity : ComponentActivity() {
   }
 
   fun openPopup(url: String) {
-    val newWebView = NestedScrollWebView(this).apply {
+    val newWebView = WebView(this).apply {
+      layoutParams = ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT,
+      )
       configureWebView(this)
       webViewClient = AppWebViewClient(this@MainActivity)
       webChromeClient = AppChromeClient(this@MainActivity)
@@ -376,9 +383,7 @@ class MainActivity : ComponentActivity() {
     private val activityRef = WeakReference(activity)
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-      Blocker.intercept(request)?.let { return it }
-
-      return activityRef.get()?.extension?.intercept(request)
+      return activityRef.get()?.interceptor?.intercept(request)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -474,7 +479,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
       val activity = activityRef.get() ?: return false
-      val newWebView = NestedScrollWebView(activity).apply {
+      val newWebView = WebView(activity).apply {
+        layoutParams = ViewGroup.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT,
+          ViewGroup.LayoutParams.MATCH_PARENT,
+        )
         activity.configureWebView(this)
         webViewClient = AppWebViewClient(activity)
         webChromeClient = this@AppChromeClient

@@ -1,5 +1,6 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
+import android.net.Uri
 import android.view.MotionEvent
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -21,29 +22,19 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.pullToRefresh
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import java.util.Locale
 
 private val DarkBackground = Color(0xFF121212)
 private val SplashGradientTop = Color(0xFF18181B)
@@ -51,12 +42,10 @@ private val SplashGradientBottom = Color(0xFF09090B)
 private val SplashProgress = Color(0xFF5B2FC0)
 private val SplashProgressTrack = Color(0x335B2FC0)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
   viewModel: MainViewModel,
   activity: MainActivity,
-  extension: Extension,
   onWebViewCreated: (WebView) -> Unit,
   popupWebView: WebView?,
   imageMenuUrl: String?,
@@ -69,97 +58,78 @@ fun MainScreen(
 
   // Full screen under the status bar and camera cutout (top is not padded).
   // Bottom (nav bar / keyboard) and sides (3-button nav in landscape) are padded.
-  // systemBars does not include the display cutout, so the waterdrop notch is covered.
   val webViewInsets = WindowInsets.systemBars
     .union(WindowInsets.ime)
     .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-
-  var currentWebView by remember { mutableStateOf<WebView?>(null) }
-  val isRefreshing = uiState.isRefreshing
-  val pullToRefreshState = rememberPullToRefreshState()
 
   Box(
     modifier = Modifier
       .fillMaxSize()
       .background(DarkBackground),
   ) {
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .windowInsetsPadding(webViewInsets)
-        .pullToRefresh(
-          isRefreshing = isRefreshing,
-          state = pullToRefreshState,
-          threshold = AppConfig.PULL_THRESHOLD_DP.dp,
-          onRefresh = {
-            val webView = currentWebView
-            // Only refresh when the page is at the top.
-            if (webView != null && !webView.canScrollVertically(-1)) {
-              viewModel.refresh {
-                if (webView.url != null) {
-                  webView.reload()
-                } else if (uiState.url != null) {
-                  webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
-                }
+    AndroidView(
+      factory = { ctx ->
+        PullToRefreshWebView(ctx).apply {
+          val host = this
+          val webView = this.webView
+          activity.configureWebView(webView)
+
+          CookieManager.getInstance().let { cookieManager ->
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(webView, true)
+          }
+
+          webView.webViewClient = MainActivity.AppWebViewClient(activity)
+          webView.webChromeClient = MainActivity.AppChromeClient(activity)
+
+          webView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+              activity.touchX = event.x.toInt()
+              activity.touchY = event.y.toInt()
+            }
+            false
+          }
+
+          webView.setOnLongClickListener {
+            activity.detectImage()
+            true
+          }
+
+          setOnRefreshListener {
+            if (webView.canScrollVertically(-1)) {
+              host.isRefreshing = false
+              return@setOnRefreshListener
+            }
+
+            viewModel.refresh { freshUrl ->
+              val currentUrl = webView.url
+              if (currentUrl == null || !sameOrigin(currentUrl, freshUrl)) {
+                webView.loadUrl(freshUrl, viewModel.defaultHeaders)
+              } else {
+                webView.reload()
               }
             }
-          },
-        ),
-    ) {
-      AndroidView(
-        factory = { ctx ->
-          NestedScrollWebView(ctx).apply {
-            activity.configureWebView(this)
-
-            extension.language = Locale.getDefault().toLanguageTag()
-            extension.userAgent = settings.userAgentString
-
-            CookieManager.getInstance().let { cookieManager ->
-              cookieManager.setAcceptCookie(true)
-              cookieManager.setAcceptThirdPartyCookies(this, true)
-            }
-
-            webViewClient = MainActivity.AppWebViewClient(activity)
-            webChromeClient = MainActivity.AppChromeClient(activity)
-
-            setOnTouchListener { _, event ->
-              if (event.action == MotionEvent.ACTION_DOWN) {
-                activity.touchX = event.x.toInt()
-                activity.touchY = event.y.toInt()
-              }
-              false
-            }
-
-            setOnLongClickListener {
-              activity.detectImage()
-              true
-            }
-
-            currentWebView = this
-            onWebViewCreated(this)
           }
-        },
-        update = { webView ->
-          currentWebView = webView
-          if (uiState.url != null && webView.url == null) {
-            webView.loadUrl(uiState.url!!, viewModel.defaultHeaders)
-          } else if (uiState.shouldReload) {
-            viewModel.onReloadHandled()
-            webView.reload()
-          }
-        },
-        modifier = Modifier
-          .fillMaxSize()
-          .nestedScroll(rememberNestedScrollInteropConnection()),
-      )
 
-      PullToRefreshDefaults.Indicator(
-        state = pullToRefreshState,
-        isRefreshing = isRefreshing,
-        modifier = Modifier.align(Alignment.TopCenter),
-        maxDistance = AppConfig.PULL_THRESHOLD_DP.dp,
-      )
-    }
+          onWebViewCreated(webView)
+        }
+      },
+      update = { host ->
+        val webView = host.webView
+        host.isRefreshing = uiState.isRefreshing
+
+        val url = uiState.url
+        if (!host.hasLoadedInitialUrl && url != null && webView.url == null) {
+          host.hasLoadedInitialUrl = true
+          viewModel.onReloadHandled()
+          webView.loadUrl(url, viewModel.defaultHeaders)
+        } else if (uiState.shouldReload && webView.url != null) {
+          viewModel.onReloadHandled()
+          webView.reload()
+        }
+      },
+      modifier = Modifier.fillMaxSize(),
+    )
 
     if (popupWebView != null) {
       Box(
@@ -241,4 +211,12 @@ fun MainScreen(
       )
     }
   }
+}
+
+private fun sameOrigin(first: String, second: String): Boolean {
+  val a = Uri.parse(first)
+  val b = Uri.parse(second)
+  return a.scheme.equals(b.scheme, ignoreCase = true) &&
+    a.host.equals(b.host, ignoreCase = true) &&
+    a.port == b.port
 }

@@ -28,7 +28,7 @@
 
         <provider
             android:name="androidx.startup.InitializationProvider"
-            android:authorities="com.shinigami.client.androidx-startup"
+            android:authorities="aeeL.shngmWeb.androidx-startup"
             android:exported="false">
             <meta-data
                 android:name="androidx.lifecycle.ProcessLifecycleInitializer"

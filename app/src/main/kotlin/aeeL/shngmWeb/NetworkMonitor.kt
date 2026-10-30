@@ -1,4 +1,4 @@
-package com.shinigami.client
+package aeeL.shngmWeb
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -34,14 +34,14 @@ class NetworkMonitor(context: Context) {
       .build()
 
     connectivityManager.registerNetworkCallback(request, callback)
-    trySend(isConnectedNow())
+    trySend(isConnected())
 
     awaitClose {
       connectivityManager.unregisterNetworkCallback(callback)
     }
   }
 
-  private fun isConnectedNow(): Boolean {
+  fun isConnected(): Boolean {
     val activeNetwork = connectivityManager.activeNetwork ?: return false
     val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
     return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
