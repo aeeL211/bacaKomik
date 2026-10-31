@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- dialog & bottom sheet surface -->
-    <color name="surface_dark">#FF18181B</color>
-    <color name="surface_container_dark">#FF2A2A2A</color>
+    <!-- Shinigami website palette -->
+    <color name="base_dark">#FF09090B</color>
+    <color name="base_bg">#FF18181B</color>
+    <color name="base_card">#FF27272A</color>
+    <color name="base_white">#FFFFFFFF</color>
 
-    <!-- text -->
-    <color name="on_surface">#FFF2F2F2</color>
-    <color name="on_surface_variant">#FFCAC4D0</color>
+    <color name="general_100">#FFF4F4F5</color>
+    <color name="general_300">#FFD4D4D8</color>
+    <color name="general_400">#FFA1A1AA</color>
+    <color name="general_500">#FF71717A</color>
+    <color name="general_700">#FF3F3F46</color>
+
+    <color name="primary_100">#FFDAD6FE</color>
+    <color name="primary_300">#FF9F8AFB</color>
+    <color name="primary_400">#FF805BF7</color>
+    <color name="primary_500">#FF6F39EE</color>
 </resources>

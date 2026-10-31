@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
 
   @SuppressLint("SetJavaScriptEnabled")
   fun configureWebView(webView: WebView) {
-    webView.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
+    webView.setBackgroundColor(android.graphics.Color.parseColor("#09090B"))
     webView.settings.apply {
       javaScriptEnabled = true
       domStorageEnabled = true
@@ -292,19 +292,35 @@ class MainActivity : ComponentActivity() {
 
   private fun showAvatarChoice(uri: Uri) {
     val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-    val name = queryDisplayName(uri) ?: "gambar"
+    val info = queryFileInfo(uri)
     avatarChoiceDialog = AvatarChoiceState(
       uri = uri,
-      fileName = name,
+      fileName = info?.name ?: "gambar",
       mimeType = mime,
+      fileSizeBytes = info?.sizeBytes,
     )
   }
 
-  private fun queryDisplayName(uri: Uri): String? = runCatching {
-    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-      if (cursor.moveToFirst()) cursor.getString(0) else null
+  private fun queryFileInfo(uri: Uri): PickedFileInfo? = runCatching {
+    contentResolver.query(
+      uri,
+      arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+      null,
+      null,
+      null,
+    )?.use { cursor ->
+      if (!cursor.moveToFirst()) return@use null
+      PickedFileInfo(
+        name = cursor.getString(0),
+        sizeBytes = if (cursor.isNull(1)) null else cursor.getLong(1),
+      )
     }
   }.getOrNull()
+
+  private data class PickedFileInfo(
+    val name: String?,
+    val sizeBytes: Long?,
+  )
 
   private fun useOriginalAvatar() {
     val state = avatarChoiceDialog ?: return
@@ -428,7 +444,7 @@ class MainActivity : ComponentActivity() {
     val html = """
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        html, body { margin: 0; height: 100%; background: #121212; }
+        html, body { margin: 0; height: 100%; background: #09090B; }
         body { display: flex; align-items: center; justify-content: center; }
         img { max-width: 100%; max-height: 100%; object-fit: contain; }
       </style>

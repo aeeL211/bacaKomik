@@ -2,6 +2,7 @@ package aeeL.shngmWeb
 
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -115,7 +115,7 @@ fun AppDialog(
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .background(Color.Black.copy(alpha = 0.6f))
+        .background(AppScrim)
         .padding(24.dp),
       contentAlignment = Alignment.Center,
     ) {
@@ -124,15 +124,17 @@ fun AppDialog(
           .fillMaxWidth()
           .wrapContentHeight(),
         shape = RoundedCornerShape(28.dp),
-        color = SurfaceDark,
-        tonalElevation = 6.dp,
+        color = BaseCard,
+        tonalElevation = 0.dp,
+        shadowElevation = 16.dp,
+        border = BorderStroke(1.dp, General700),
       ) {
         Column(
           modifier = Modifier.padding(24.dp),
         ) {
           Text(
             text = title,
-            color = OnSurface,
+            color = General100,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
           )
@@ -141,7 +143,7 @@ fun AppDialog(
           if (dialogType.message.isNotEmpty() || prompt == null) {
             Text(
               text = dialogType.message,
-              color = OnSurfaceVariant,
+              color = General300,
               fontSize = 14.sp,
             )
             if (prompt != null) Spacer(modifier = Modifier.height(12.dp))
@@ -154,10 +156,13 @@ fun AppDialog(
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
               colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = PrimaryAccent,
-                unfocusedBorderColor = OnSurfaceVariant,
-                focusedTextColor = OnSurface,
-                unfocusedTextColor = OnSurface,
+                focusedBorderColor = Primary400,
+                unfocusedBorderColor = General700,
+                focusedTextColor = General100,
+                unfocusedTextColor = General100,
+                cursorColor = Primary300,
+                focusedContainerColor = BaseDark,
+                unfocusedContainerColor = BaseDark,
               ),
               singleLine = true,
               keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -171,11 +176,11 @@ fun AppDialog(
           ) {
             if (dialogType !is DialogType.Alert) {
               TextButton(onClick = onCancel) {
-                Text(text = "Batal", color = OnSurfaceVariant)
+                Text(text = "Batal", color = General400)
               }
             }
             TextButton(onClick = onConfirm) {
-              Text(text = "OK", color = PrimaryAccent)
+              Text(text = "OK", color = Primary300)
             }
           }
         }
@@ -189,9 +194,9 @@ fun AppDialog(
 fun WelcomeDialog(onDismiss: () -> Unit) {
   AlertDialog(
     onDismissRequest = onDismiss,
-    containerColor = SurfaceDark,
-    titleContentColor = OnSurface,
-    textContentColor = OnSurfaceVariant,
+    containerColor = BaseCard,
+    titleContentColor = General100,
+    textContentColor = General300,
     title = {
       Text(
         text = "Fitur Premium",
@@ -214,7 +219,7 @@ fun WelcomeDialog(onDismiss: () -> Unit) {
         contentAlignment = Alignment.Center,
       ) {
         TextButton(onClick = onDismiss) {
-          Text(text = "Mengerti", color = PrimaryAccent)
+          Text(text = "Mengerti", color = Primary300)
         }
       }
     },

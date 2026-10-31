@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -42,11 +41,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private const val TAG = "MainScreen"
 
-private val DarkBackground = Color(0xFF121212)
-private val SplashGradientTop = Color(0xFF18181B)
-private val SplashGradientBottom = Color(0xFF09090B)
-private val SplashProgress = Color(0xFF5B2FC0)
-private val SplashProgressTrack = Color(0x335B2FC0)
+private val DarkBackground = BaseDark
+private val SplashGradientTop = BaseBg
+private val SplashGradientBottom = BaseDark
+private val SplashProgress = Primary500
+private val SplashProgressTrack = Primary500.copy(alpha = 0.22f)
 
 @Composable
 fun MainScreen(
@@ -137,8 +136,11 @@ fun MainScreen(
         when {
           command.reloadIfSameOrigin && currentUrl != null && sameOrigin(currentUrl, command.url) ->
             webView.reload()
+
           currentUrl == null -> webView.loadUrl(command.url, viewModel.defaultHeaders)
+
           !command.reloadIfSameOrigin -> Unit
+
           else -> webView.loadUrl(command.url, viewModel.defaultHeaders)
         }
       } catch (e: Exception) {

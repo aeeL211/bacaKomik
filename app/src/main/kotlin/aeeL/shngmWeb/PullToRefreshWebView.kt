@@ -49,8 +49,9 @@ class PullToRefreshWebView(context: Context) : SwipeRefreshLayout(context) {
   }
 
   companion object {
-    private val ACCENT = 0xFF5B2FC0.toInt()
-    private val BACKGROUND = 0xFF121212.toInt()
+    // Mirrors Primary500, BaseDark and BaseBg from the Shinigami palette.
+    private val ACCENT = 0xFF6F39EE.toInt()
+    private val BACKGROUND = 0xFF09090B.toInt()
     private val BACKGROUND_TOP = 0xFF18181B.toInt()
   }
 }

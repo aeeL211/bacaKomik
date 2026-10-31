@@ -35,58 +35,56 @@ internal object AvatarUploader {
       .build()
   }
 
-  suspend fun uploadToCatbox(context: Context, uri: Uri, originalName: String?): Result<String> =
-    withContext(Dispatchers.IO) {
-      runCatching {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-          ?: throw IOException("File tidak bisa dibaca.")
-        if (bytes.isEmpty()) throw IOException("File kosong.")
-        if (bytes.size > MAX_BYTES) throw IOException("Ukuran gambar maksimal 20 MB.")
+  suspend fun uploadToCatbox(context: Context, uri: Uri, originalName: String?): Result<String> = withContext(Dispatchers.IO) {
+    runCatching {
+      val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: throw IOException("File tidak bisa dibaca.")
+      if (bytes.isEmpty()) throw IOException("File kosong.")
+      if (bytes.size > MAX_BYTES) throw IOException("Ukuran gambar maksimal 20 MB.")
 
-        val mime = detectMime(bytes) ?: context.contentResolver.getType(uri) ?: "application/octet-stream"
-        if (!mime.startsWith("image/")) throw IOException("File yang dipilih bukan gambar.")
-        val fileName = buildFileName(originalName, mime)
+      val mime = detectMime(bytes) ?: context.contentResolver.getType(uri) ?: "application/octet-stream"
+      if (!mime.startsWith("image/")) throw IOException("File yang dipilih bukan gambar.")
+      val fileName = buildFileName(originalName, mime)
 
-        val body = MultipartBody.Builder()
-          .setType(MultipartBody.FORM)
-          .addFormDataPart("reqtype", "fileupload")
-          .addFormDataPart("fileToUpload", fileName, bytes.toRequestBody(mime.toMediaTypeOrNull()))
-          .build()
+      val body = MultipartBody.Builder()
+        .setType(MultipartBody.FORM)
+        .addFormDataPart("reqtype", "fileupload")
+        .addFormDataPart("fileToUpload", fileName, bytes.toRequestBody(mime.toMediaTypeOrNull()))
+        .build()
 
-        val request = Request.Builder()
-          .url(CATBOX_URL)
-          .post(body)
-          .header("User-Agent", ImageCache.userAgent ?: FALLBACK_USER_AGENT)
-          .build()
+      val request = Request.Builder()
+        .url(CATBOX_URL)
+        .post(body)
+        .header("User-Agent", ImageCache.userAgent ?: FALLBACK_USER_AGENT)
+        .build()
 
-        client.newCall(request).execute().use { response ->
-          val text = response.body.string().trim()
-          if (!response.isSuccessful) throw IOException("Catbox HTTP ${response.code}: ${text.take(200)}")
-          if (!text.startsWith("https://") && !text.startsWith("http://")) {
-            throw IOException("Catbox menolak file: ${text.take(200)}")
-          }
-          text
+      client.newCall(request).execute().use { response ->
+        val text = response.body.string().trim()
+        if (!response.isSuccessful) throw IOException("Catbox HTTP ${response.code}: ${text.take(200)}")
+        if (!text.startsWith("https://") && !text.startsWith("http://")) {
+          throw IOException("Catbox menolak file: ${text.take(200)}")
         }
+        text
       }
     }
+  }
 
-  suspend fun setAvatar(tokens: List<String>, imageUrl: String): Result<Unit> =
-    withContext(Dispatchers.IO) {
-      if (tokens.isEmpty()) {
-        return@withContext Result.failure(IOException("Sesi login tidak ditemukan. Login dulu di website."))
-      }
-
-      var lastError: Throwable? = null
-      for (token in tokens.distinct()) {
-        val result = setAvatarWithToken(token, imageUrl)
-        if (result.isSuccess) return@withContext result
-
-        val error = result.exceptionOrNull()
-        lastError = error
-        if (error !is AvatarApiException || error.code != 401) return@withContext result
-      }
-      Result.failure(lastError ?: IOException("Gagal menyimpan foto profil."))
+  suspend fun setAvatar(tokens: List<String>, imageUrl: String): Result<Unit> = withContext(Dispatchers.IO) {
+    if (tokens.isEmpty()) {
+      return@withContext Result.failure(IOException("Sesi login tidak ditemukan. Login dulu di website."))
     }
+
+    var lastError: Throwable? = null
+    for (token in tokens.distinct()) {
+      val result = setAvatarWithToken(token, imageUrl)
+      if (result.isSuccess) return@withContext result
+
+      val error = result.exceptionOrNull()
+      lastError = error
+      if (error !is AvatarApiException || error.code != 401) return@withContext result
+    }
+    Result.failure(lastError ?: IOException("Gagal menyimpan foto profil."))
+  }
 
   private fun setAvatarWithToken(token: String, imageUrl: String): Result<Unit> = runCatching {
     val payload = JSONObject().put("avatar_image_url", imageUrl).toString()
