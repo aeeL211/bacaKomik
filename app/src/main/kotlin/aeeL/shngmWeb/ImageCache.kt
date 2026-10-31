@@ -12,7 +12,6 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 import java.util.Locale
 
 /**
@@ -80,7 +79,8 @@ object ImageCache {
     if (NON_CACHEABLE_HOSTS.any { host == it || host.endsWith(".$it") }) return false
 
     val path = url.path.orEmpty().lowercase(Locale.ROOT)
-    val looksLikeImage = IMAGE_EXTENSIONS.any { path.endsWith(it) }
+    val extension = path.substringAfterLast('.', "")
+    val looksLikeImage = extension.isNotEmpty() && extension in IMAGE_EXTENSIONS
 
     val headers = request.requestHeaders
     val destination = headers.entries
@@ -155,21 +155,15 @@ object ImageCache {
     }
   }
 
-  /** Opens the image through the same cache; used by the long-press preview. */
-  fun openStream(url: String): InputStream? = try {
-    val builder = requestBuilder(url)
-    val response = fetch(url, builder)
-    if (response == null) {
-      null
-    } else if (response.isSuccessful) {
-      response.body.byteStream()
-    } else {
-      response.close()
+  /** Reads the image through the same cache; used by the long-press preview. */
+  fun openBytes(url: String): ByteArray? {
+    return try {
+      val response = fetch(url, requestBuilder(url)) ?: return null
+      response.use { if (it.isSuccessful) it.body.bytes() else null }
+    } catch (e: Exception) {
+      Logger.w(TAG) { "Preview load failed for $url: ${e.message}" }
       null
     }
-  } catch (e: Exception) {
-    Logger.w(TAG) { "Preview load failed for $url: ${e.message}" }
-    null
   }
 
   private fun fetch(url: String, builder: Request.Builder): Response? {
@@ -225,14 +219,14 @@ object ImageCache {
   }
 
   private val IMAGE_EXTENSIONS = setOf(
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".gif",
-    ".avif",
-    ".bmp",
-    ".svg",
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "avif",
+    "bmp",
+    "svg",
   )
 
   /** Challenge/widget hosts whose images can change at any time. */

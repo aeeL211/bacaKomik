@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -31,18 +34,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-
-val SurfaceDark = Color(0xFF121212)
-val SurfaceContainerDark = Color(0xFF1E1E1E)
-val OnSurface = Color(0xFFE6E1E5)
-val OnSurfaceVariant = Color(0xFFCAC4D0)
-val PrimaryAccent = Color(0xFFD0BCFF)
-val Hint = Color(0xFF938F96)
-val PlaceholderTint = Color(0xFF605D62)
 
 sealed interface DialogType {
   val message: String
@@ -143,6 +139,8 @@ fun AppDialog(
                 unfocusedTextColor = OnSurface,
               ),
               singleLine = true,
+              keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+              keyboardActions = KeyboardActions(onDone = { onConfirm() }),
             )
           }
           Spacer(modifier = Modifier.height(24.dp))
@@ -163,4 +161,29 @@ fun AppDialog(
       }
     }
   }
+}
+
+/** One-time onboarding hint for the premium unlock flow. */
+@Composable
+fun WelcomeDialog(onDismiss: () -> Unit) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    containerColor = SurfaceDark,
+    titleContentColor = OnSurface,
+    textContentColor = OnSurfaceVariant,
+    title = {
+      Text(
+        text = "Fitur Premium",
+        fontWeight = FontWeight.Bold,
+      )
+    },
+    text = {
+      Text(text = "Login dengan akun Google untuk membuka fitur premium secara gratis.")
+    },
+    confirmButton = {
+      TextButton(onClick = onDismiss) {
+        Text(text = "Mengerti", color = PrimaryAccent)
+      }
+    },
+  )
 }

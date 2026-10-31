@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -18,7 +19,14 @@ data class MainState(
   val isRefreshing: Boolean = false,
   val loadingProgress: Int = 0,
   val isSplashVisible: Boolean = true,
-  val shouldReload: Boolean = false,
+  val pageCommand: PageCommand? = null,
+)
+
+/** A one-shot instruction for the WebView host, acknowledged with [MainViewModel.onPageCommandHandled]. */
+data class PageCommand(
+  val id: Long,
+  val url: String,
+  val reloadIfSameOrigin: Boolean,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,47 +39,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _uiState = MutableStateFlow(MainState())
   val uiState: StateFlow<MainState> = _uiState.asStateFlow()
 
-  val defaultHeaders: Map<String, String> = mapOf("Accept-Language" to Locale.getDefault().language)
+  val defaultHeaders: Map<String, String> = mapOf(
+    "Accept-Language" to Locale.getDefault().toLanguageTag(),
+  )
 
   private var isOnline = networkMonitor.isConnected()
   private var isPageLoaded = false
   private var splashJob: Job? = null
   private var refreshTimeoutJob: Job? = null
   private var configJob: Job? = null
+  private var nextCommandId = 0L
 
   init {
     ImageCache.isOnline = isOnline
-    loadConfig()
+    loadConfig(emitCommand = true, reloadIfSameOrigin = false)
     observeNetwork()
     startSplashTimer(SPLASH_HANG_MS)
   }
 
-  private fun loadConfig() {
+  private fun loadConfig(emitCommand: Boolean, reloadIfSameOrigin: Boolean) {
     if (configJob?.isActive == true) return
+
     configJob = viewModelScope.launch {
       val url = configRepository.fetchUrl()
-      _uiState.update { it.copy(url = url) }
+      val command = if (emitCommand) {
+        PageCommand(nextCommandId++, url, reloadIfSameOrigin)
+      } else {
+        null
+      }
+
+      _uiState.update { state ->
+        state.copy(
+          url = url,
+          pageCommand = command ?: state.pageCommand,
+        )
+      }
     }
   }
 
   private fun observeNetwork() {
     viewModelScope.launch {
-      networkMonitor.networkStatus.collect { isConnected ->
-        val wasOnline = isOnline
-        isOnline = isConnected
-        ImageCache.isOnline = isConnected
+      networkMonitor.networkStatus
+        .catch { e -> Logger.w(TAG) { "Network monitor stopped: ${e.message}" } }
+        .collect { isConnected ->
+          val wasOnline = isOnline
+          isOnline = isConnected
+          ImageCache.isOnline = isConnected
 
-        if (isConnected) {
-          if (!wasOnline) {
-            loadConfig()
-            if (_uiState.value.isSplashVisible && !isPageLoaded && _uiState.value.url != null) {
-              _uiState.update { it.copy(shouldReload = true) }
+          if (isConnected) {
+            if (!wasOnline) {
+              loadConfig(emitCommand = !isPageLoaded, reloadIfSameOrigin = true)
             }
+          } else {
+            _uiState.update { it.copy(isRefreshing = false) }
           }
-        } else {
-          _uiState.update { it.copy(isRefreshing = false) }
         }
-      }
     }
   }
 
@@ -83,10 +105,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   fun onPageStarted() {
     isPageLoaded = false
+    if (_uiState.value.isSplashVisible) {
+      _uiState.update { it.copy(loadingProgress = 0) }
+    }
   }
 
   fun onPageFinished() {
-    isPageLoaded = true
+    finishPageLoad(loaded = true)
+  }
+
+  fun onPageLoadFailed() {
+    finishPageLoad(loaded = false)
+  }
+
+  private fun finishPageLoad(loaded: Boolean) {
+    isPageLoaded = loaded
     refreshTimeoutJob?.cancel()
     refreshTimeoutJob = null
     _uiState.update { it.copy(isRefreshing = false) }
@@ -97,10 +130,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   /**
-   * Re-fetches the remote config before reloading, so an edited url.txt takes effect on the
-   * next pull instead of waiting for the next app launch.
+   * Re-fetches the remote config, then asks the WebView host to reload or navigate.
+   * The host acknowledges the command, so no callback is held across the ViewModel boundary.
    */
-  fun refresh(onReady: (String) -> Unit) {
+  fun refresh() {
     if (_uiState.value.isRefreshing) return
 
     _uiState.update { it.copy(isRefreshing = true) }
@@ -114,17 +147,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     viewModelScope.launch {
       val url = configRepository.fetchUrl()
-      _uiState.update { it.copy(url = url) }
-      try {
-        onReady(url)
-      } catch (e: Exception) {
-        Logger.e(TAG, e) { "Refresh callback failed" }
+      _uiState.update {
+        it.copy(
+          url = url,
+          pageCommand = PageCommand(nextCommandId++, url, reloadIfSameOrigin = true),
+        )
       }
     }
   }
 
-  fun onReloadHandled() {
-    _uiState.update { it.copy(shouldReload = false) }
+  fun onPageCommandHandled(id: Long) {
+    _uiState.update { state ->
+      if (state.pageCommand?.id == id) state.copy(pageCommand = null) else state
+    }
   }
 
   private fun startSplashTimer(delayMs: Long) {

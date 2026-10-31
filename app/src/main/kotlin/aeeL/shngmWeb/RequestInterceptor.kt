@@ -71,7 +71,7 @@ class RequestInterceptor {
     if (!request.isForMainFrame) return false
     val method = request.method ?: return false
     if (!method.equals("GET", ignoreCase = true)) return false
-    if (ALLOWED_HOSTS.none { host == it || host.endsWith(".$it") }) return false
+    if (!isComicHost(host)) return false
 
     val accept = request.requestHeaders.header("Accept")
     return accept == null || accept.contains("text/html", ignoreCase = true)
@@ -177,8 +177,6 @@ class RequestInterceptor {
     private const val TAG = "RequestInterceptor"
     private const val ANNOUNCEMENT_ID = "8dfa0456-9c8a-4f0e-a1de-5153a26e13e5"
     private const val DEFAULT_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-
-    private val ALLOWED_HOSTS = setOf("shinigami.asia", "shngm.io", "shinigami.to", "shngm.id")
 
     private val SKIPPED_HEADERS = setOf(
       "host",

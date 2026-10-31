@@ -8,7 +8,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.util.Base64
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -54,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -66,13 +69,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 private val ContextMenuAccent = Color.White
+private const val PREVIEW_MAX_PX = 1280
 
-private enum class PreviewState {
-  LOADING,
-  SUCCESS,
-  ERROR,
+private val DOWNLOAD_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp")
+
+private sealed interface PreviewState {
+  data object Loading : PreviewState
+
+  data class Success(val image: ImageBitmap) : PreviewState
+
+  data object Error : PreviewState
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,17 +93,13 @@ fun ContextMenuBottomSheet(
 ) {
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
-  var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-  var previewState by remember { mutableStateOf(PreviewState.LOADING) }
+  var preview by remember(url) { mutableStateOf<PreviewState>(PreviewState.Loading) }
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   LaunchedEffect(url) {
-    previewState = PreviewState.LOADING
-    val bitmap = withContext(Dispatchers.IO) {
-      ImageCache.openStream(url)?.use { BitmapFactory.decodeStream(it) }
-    }
-    previewBitmap = bitmap
-    previewState = if (bitmap != null) PreviewState.SUCCESS else PreviewState.ERROR
+    preview = PreviewState.Loading
+    val bitmap = withContext(Dispatchers.IO) { loadPreviewBitmap(url) }
+    preview = bitmap?.let { PreviewState.Success(it.asImageBitmap()) } ?: PreviewState.Error
   }
 
   ModalBottomSheet(
@@ -129,7 +134,6 @@ fun ContextMenuBottomSheet(
           .fillMaxWidth()
           .aspectRatio(16f / 9f)
           .heightIn(max = 220.dp)
-          .clip(RoundedCornerShape(16.dp))
           .clickable {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onOpenInPopup(url)
@@ -140,8 +144,8 @@ fun ContextMenuBottomSheet(
           modifier = Modifier.fillMaxSize(),
           contentAlignment = Alignment.Center,
         ) {
-          when (previewState) {
-            PreviewState.LOADING -> {
+          when (val state = preview) {
+            PreviewState.Loading -> {
               val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
               val alpha by infiniteTransition.animateFloat(
                 initialValue = 0.2f,
@@ -165,17 +169,15 @@ fun ContextMenuBottomSheet(
                 )
               }
             }
-            PreviewState.SUCCESS -> {
-              previewBitmap?.let { bitmap ->
-                Image(
-                  bitmap = bitmap.asImageBitmap(),
-                  contentDescription = "Preview",
-                  modifier = Modifier.fillMaxSize(),
-                  contentScale = ContentScale.Crop,
-                )
-              }
+            is PreviewState.Success -> {
+              Image(
+                bitmap = state.image,
+                contentDescription = "Pratinjau gambar",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+              )
             }
-            PreviewState.ERROR -> {
+            PreviewState.Error -> {
               Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -230,19 +232,7 @@ fun ContextMenuBottomSheet(
           modifier = Modifier.weight(1f),
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            safeAction(context) {
-              val request = DownloadManager.Request(Uri.parse(url))
-                .setTitle("Mengunduh Gambar")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(
-                  Environment.DIRECTORY_PICTURES,
-                  "Shinigami/IMG_${System.currentTimeMillis()}.jpg",
-                )
-
-              val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-              downloadManager.enqueue(request)
-              Toast.makeText(context, "Proses unduh dimulai...", Toast.LENGTH_SHORT).show()
-            }
+            safeAction(context) { downloadImage(context, url) }
             onDismissRequest()
           },
         )
@@ -332,7 +322,7 @@ private fun ActionTile(
     ) {
       Icon(
         painter = painterResource(id = iconRes),
-        contentDescription = label,
+        contentDescription = null,
         tint = ContextMenuAccent,
         modifier = Modifier.size(24.dp),
       )
@@ -366,7 +356,7 @@ private fun ActionRow(
   ) {
     Icon(
       painter = painterResource(id = iconRes),
-      contentDescription = title,
+      contentDescription = null,
       tint = ContextMenuAccent,
       modifier = Modifier.size(22.dp),
     )
@@ -377,6 +367,63 @@ private fun ActionRow(
       fontSize = 14.sp,
     )
   }
+}
+
+private fun downloadImage(context: Context, url: String) {
+  val extension = url.substringBefore('?')
+    .substringAfterLast('.', "jpg")
+    .lowercase(Locale.ROOT)
+    .takeIf { it in DOWNLOAD_EXTENSIONS } ?: "jpg"
+
+  val request = DownloadManager.Request(Uri.parse(url))
+    .setTitle("Mengunduh Gambar")
+    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+
+  val fileName = "Shinigami/IMG_${System.currentTimeMillis()}.$extension"
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, fileName)
+  } else {
+    // Public Pictures needs WRITE_EXTERNAL_STORAGE on API 24-28; app storage needs no permission.
+    request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_PICTURES, fileName)
+  }
+
+  val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+  downloadManager.enqueue(request)
+  Toast.makeText(context, "Proses unduh dimulai...", Toast.LENGTH_SHORT).show()
+}
+
+private fun loadPreviewBitmap(url: String): Bitmap? {
+  val bytes = when {
+    url.startsWith("data:image/", ignoreCase = true) -> decodeDataUrl(url)
+    else -> ImageCache.openBytes(url)
+  } ?: return null
+
+  val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+  BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+  if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+  val options = BitmapFactory.Options().apply {
+    inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, PREVIEW_MAX_PX)
+  }
+  return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+}
+
+private fun decodeDataUrl(url: String): ByteArray? {
+  val comma = url.indexOf(',')
+  if (comma < 0) return null
+
+  val header = url.substring(0, comma)
+  if (!header.contains(";base64", ignoreCase = true)) return null
+
+  return runCatching { Base64.decode(url.substring(comma + 1), Base64.DEFAULT) }.getOrNull()
+}
+
+private fun calculateInSampleSize(width: Int, height: Int, maxDimension: Int): Int {
+  var sampleSize = 1
+  while (maxOf(width, height) / sampleSize > maxDimension) {
+    sampleSize *= 2
+  }
+  return sampleSize
 }
 
 private fun safeAction(context: Context, action: () -> Unit) {

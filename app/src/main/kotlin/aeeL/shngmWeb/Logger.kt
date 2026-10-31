@@ -104,6 +104,9 @@ object Logger {
     }
   }
 
+  // SimpleDateFormat is not thread-safe; log() can be called from any thread.
+  private fun timestamp(): String = synchronized(timeFormat) { timeFormat.format(Date()) }
+
   private fun log(priority: Int, tag: String, err: Throwable?, msg: () -> String) {
     if (!AppConfig.DEBUG) return
     val text = msg()
@@ -111,7 +114,7 @@ object Logger {
 
     if (!isReady) return
     val line = buildString {
-      append("${timeFormat.format(Date())} [${LEVEL_CHARS[priority - Log.VERBOSE]}] $tag: $text\n")
+      append("${timestamp()} [${LEVEL_CHARS[priority - Log.VERBOSE]}] $tag: $text\n")
       if (err != null) {
         append("  ↳ ${err.javaClass.simpleName}: ${err.message}\n")
         err.stackTrace.take(5).forEach { append("  at $it\n") }

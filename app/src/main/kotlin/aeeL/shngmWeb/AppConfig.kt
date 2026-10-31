@@ -7,7 +7,7 @@ object AppConfig {
   const val MAX_LOG_FILE_SIZE = 5 * 1024 * 1024L
   const val MAX_LOG_FILES = 3
 
-  const val VERSION_NAME = "1.7.0"
+  val VERSION_NAME = BuildConfig.VERSION_NAME
 
   const val BASE_URL = "https://shinigami.to"
   const val CONFIG_URL = "https://raw.githubusercontent.com/aeeL211/bacaKomik/refs/heads/main/url.txt"

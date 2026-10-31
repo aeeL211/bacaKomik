@@ -24,17 +24,23 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+private const val TAG = "MainScreen"
 
 private val DarkBackground = Color(0xFF121212)
 private val SplashGradientTop = Color(0xFF18181B)
@@ -53,8 +59,11 @@ fun MainScreen(
   onOpenPopup: (String) -> Unit,
   activeDialog: DialogType?,
   onDismissDialog: () -> Unit,
+  showWelcomeDialog: Boolean,
+  onDismissWelcome: () -> Unit,
 ) {
-  val uiState by viewModel.uiState.collectAsState()
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val context = LocalContext.current
 
   // Full screen under the status bar and camera cutout (top is not padded).
   // Bottom (nav bar / keyboard) and sides (3-button nav in landscape) are padded.
@@ -62,153 +71,175 @@ fun MainScreen(
     .union(WindowInsets.ime)
     .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
 
+  // The host is created once and kept stable; AndroidView only attaches it to the hierarchy.
+  val host = remember {
+    PullToRefreshWebView(context).apply {
+      val refreshHost = this
+      val webView = this.webView
+      activity.configureWebView(webView)
+
+      CookieManager.getInstance().let { cookieManager ->
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
+      }
+
+      webView.webViewClient = MainActivity.AppWebViewClient(activity)
+      webView.webChromeClient = MainActivity.AppChromeClient(activity)
+
+      webView.setOnTouchListener { _, event ->
+        if (event.action == MotionEvent.ACTION_DOWN) {
+          activity.touchX = event.x.toInt()
+          activity.touchY = event.y.toInt()
+        }
+        false
+      }
+
+      webView.setOnLongClickListener {
+        activity.detectImage()
+        true
+      }
+
+      setOnRefreshListener {
+        if (webView.canScrollVertically(-1)) {
+          refreshHost.isRefreshing = false
+          return@setOnRefreshListener
+        }
+        viewModel.refresh()
+      }
+
+      onWebViewCreated(webView)
+    }
+  }
+
   Box(
     modifier = Modifier
       .fillMaxSize()
       .background(DarkBackground),
   ) {
     AndroidView(
-      factory = { ctx ->
-        PullToRefreshWebView(ctx).apply {
-          val host = this
-          val webView = this.webView
-          activity.configureWebView(webView)
-
-          CookieManager.getInstance().let { cookieManager ->
-            cookieManager.setAcceptCookie(true)
-            cookieManager.setAcceptThirdPartyCookies(webView, true)
-          }
-
-          webView.webViewClient = MainActivity.AppWebViewClient(activity)
-          webView.webChromeClient = MainActivity.AppChromeClient(activity)
-
-          webView.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-              activity.touchX = event.x.toInt()
-              activity.touchY = event.y.toInt()
-            }
-            false
-          }
-
-          webView.setOnLongClickListener {
-            activity.detectImage()
-            true
-          }
-
-          setOnRefreshListener {
-            if (webView.canScrollVertically(-1)) {
-              host.isRefreshing = false
-              return@setOnRefreshListener
-            }
-
-            viewModel.refresh { freshUrl ->
-              val currentUrl = webView.url
-              if (currentUrl == null || !sameOrigin(currentUrl, freshUrl)) {
-                webView.loadUrl(freshUrl, viewModel.defaultHeaders)
-              } else {
-                webView.reload()
-              }
-            }
-          }
-
-          onWebViewCreated(webView)
-        }
-      },
-      update = { host ->
-        val webView = host.webView
-        host.isRefreshing = uiState.isRefreshing
-
-        val url = uiState.url
-        if (!host.hasLoadedInitialUrl && url != null && webView.url == null) {
-          host.hasLoadedInitialUrl = true
-          viewModel.onReloadHandled()
-          webView.loadUrl(url, viewModel.defaultHeaders)
-        } else if (uiState.shouldReload && webView.url != null) {
-          viewModel.onReloadHandled()
-          webView.reload()
-        }
-      },
-      modifier = Modifier.fillMaxSize(),
+      factory = { host },
+      update = { it.isRefreshing = uiState.isRefreshing },
+      modifier = Modifier
+        .fillMaxSize()
+        .windowInsetsPadding(webViewInsets),
     )
 
-    if (popupWebView != null) {
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .background(DarkBackground),
-      ) {
-        AndroidView(
-          factory = { popupWebView },
-          modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(webViewInsets),
-        )
+    LaunchedEffect(uiState.pageCommand?.id) {
+      val command = uiState.pageCommand ?: return@LaunchedEffect
+      val webView = host.webView
+
+      try {
+        val currentUrl = webView.url
+        when {
+          command.reloadIfSameOrigin && currentUrl != null && sameOrigin(currentUrl, command.url) ->
+            webView.reload()
+          currentUrl == null -> webView.loadUrl(command.url, viewModel.defaultHeaders)
+          !command.reloadIfSameOrigin -> Unit
+          else -> webView.loadUrl(command.url, viewModel.defaultHeaders)
+        }
+      } catch (e: Exception) {
+        Logger.e(TAG, e) { "Failed to apply page command for ${command.url}" }
+      } finally {
+        viewModel.onPageCommandHandled(command.id)
       }
     }
 
-    AnimatedVisibility(
-      visible = uiState.isSplashVisible,
-      exit = fadeOut(animationSpec = tween(durationMillis = 500)),
-    ) {
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .background(
-            brush = Brush.verticalGradient(
-              colors = listOf(SplashGradientTop, SplashGradientBottom),
-            ),
-          ),
-        contentAlignment = Alignment.Center,
-      ) {
-        Image(
-          painter = painterResource(id = R.drawable.logo),
-          contentDescription = null,
+    val popup = popupWebView
+    if (popup != null) {
+      key(popup) {
+        Box(
           modifier = Modifier
-            .fillMaxWidth(0.65f)
-            .aspectRatio(1f),
-          contentScale = ContentScale.Fit,
-        )
-
-        if (uiState.loadingProgress > 0) {
-          LinearProgressIndicator(
-            progress = { uiState.loadingProgress / 100f },
+            .fillMaxSize()
+            .background(DarkBackground),
+        ) {
+          AndroidView(
+            factory = { popup },
             modifier = Modifier
-              .fillMaxWidth()
-              .align(Alignment.BottomCenter)
-              .windowInsetsPadding(WindowInsets.navigationBars)
-              .height(3.dp),
-            color = SplashProgress,
-            trackColor = SplashProgressTrack,
-            strokeCap = StrokeCap.Butt,
-          )
-        } else {
-          LinearProgressIndicator(
-            modifier = Modifier
-              .fillMaxWidth()
-              .align(Alignment.BottomCenter)
-              .windowInsetsPadding(WindowInsets.navigationBars)
-              .height(3.dp),
-            color = SplashProgress,
-            trackColor = SplashProgressTrack,
-            strokeCap = StrokeCap.Butt,
+              .fillMaxSize()
+              .windowInsetsPadding(webViewInsets),
           )
         }
       }
     }
 
-    if (activeDialog != null) {
+    SplashOverlay(
+      visible = uiState.isSplashVisible,
+      progress = uiState.loadingProgress,
+    )
+
+    activeDialog?.let { dialog ->
       AppDialog(
-        dialogType = activeDialog,
+        dialogType = dialog,
         onDismiss = onDismissDialog,
       )
     }
 
-    if (imageMenuUrl != null) {
+    imageMenuUrl?.let { url ->
       ContextMenuBottomSheet(
-        url = imageMenuUrl,
+        url = url,
         onDismissRequest = onDismissMenu,
         onOpenInPopup = onOpenPopup,
       )
+    }
+
+    if (showWelcomeDialog && !uiState.isSplashVisible) {
+      WelcomeDialog(onDismiss = onDismissWelcome)
+    }
+  }
+}
+
+@Composable
+private fun SplashOverlay(
+  visible: Boolean,
+  progress: Int,
+) {
+  AnimatedVisibility(
+    visible = visible,
+    exit = fadeOut(animationSpec = tween(durationMillis = 500)),
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .background(
+          brush = Brush.verticalGradient(
+            colors = listOf(SplashGradientTop, SplashGradientBottom),
+          ),
+        ),
+      contentAlignment = Alignment.Center,
+    ) {
+      Image(
+        painter = painterResource(id = R.drawable.logo),
+        contentDescription = null,
+        modifier = Modifier
+          .fillMaxWidth(0.65f)
+          .aspectRatio(1f),
+        contentScale = ContentScale.Fit,
+      )
+
+      if (progress > 0) {
+        LinearProgressIndicator(
+          progress = { progress / 100f },
+          modifier = Modifier
+            .fillMaxWidth()
+            .align(Alignment.BottomCenter)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .height(3.dp),
+          color = SplashProgress,
+          trackColor = SplashProgressTrack,
+          strokeCap = StrokeCap.Butt,
+        )
+      } else {
+        LinearProgressIndicator(
+          modifier = Modifier
+            .fillMaxWidth()
+            .align(Alignment.BottomCenter)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .height(3.dp),
+          color = SplashProgress,
+          trackColor = SplashProgressTrack,
+          strokeCap = StrokeCap.Butt,
+        )
+      }
     }
   }
 }

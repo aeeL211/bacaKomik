@@ -16,9 +16,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
  */
 class PullToRefreshWebView(context: Context) : SwipeRefreshLayout(context) {
 
-  /** Set by the screen after the first URL has been handed to the WebView. */
-  var hasLoadedInitialUrl = false
-
   val webView: WebView = WebView(context).apply {
     layoutParams = ViewGroup.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT,

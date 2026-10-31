@@ -2,7 +2,6 @@ package aeeL.shngmWeb
 
 import android.app.Application
 import android.util.Log
-import com.google.android.material.color.DynamicColors
 import kotlin.system.exitProcess
 
 class ShinigamiApp : Application() {
@@ -11,11 +10,12 @@ class ShinigamiApp : Application() {
     super.onCreate()
     Logger.init(this)
     ImageCache.init(this)
-    DynamicColors.applyToActivitiesIfAvailable(this)
     setupCrashHandler()
   }
 
   private fun setupCrashHandler() {
+    val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
       try {
         Logger.logCrash(throwable)
@@ -24,7 +24,11 @@ class ShinigamiApp : Application() {
       } catch (e: Exception) {
         Log.e("ShinigamiApp", "Crash handler failed", e)
       } finally {
-        exitProcess(10)
+        if (previousHandler != null) {
+          previousHandler.uncaughtException(thread, throwable)
+        } else {
+          exitProcess(10)
+        }
       }
     }
   }

@@ -1,16 +1,12 @@
 package aeeL.shngmWeb
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Message
 import android.text.TextUtils
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.ValueCallback
@@ -24,16 +20,14 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.util.Locale
@@ -41,20 +35,22 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
 
   val viewModel: MainViewModel by viewModels()
-  val interceptor by lazy { RequestInterceptor() }
+  private val interceptor by lazy { RequestInterceptor() }
 
-  val imageDetectorJs: String by lazy {
+  private val imageDetectorJs: String by lazy {
     assets.open("js/image_detector.js").bufferedReader().use { it.readText() }
   }
 
   private var mainWebView: WebView? = null
   var popupWebView by mutableStateOf<WebView?>(null)
+    private set
 
   var imageMenuUrl by mutableStateOf<String?>(null)
   var activeDialog by mutableStateOf<DialogType?>(null)
+  var showWelcomeDialog by mutableStateOf(false)
+    private set
 
   private var uploadCallback: ValueCallback<Array<Uri>>? = null
-  private var pendingChooser: WebChromeClient.FileChooserParams? = null
 
   private var lastBackPressedTime = 0L
   var touchX = 0
@@ -63,7 +59,6 @@ class MainActivity : ComponentActivity() {
   private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     val callback = uploadCallback ?: return@registerForActivityResult
     uploadCallback = null
-    pendingChooser = null
 
     val resultUris = if (result.resultCode == RESULT_OK) {
       result.data?.data?.let { arrayOf(it) }
@@ -77,49 +72,17 @@ class MainActivity : ComponentActivity() {
     callback.onReceiveValue(resultUris)
   }
 
-  private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-    val allGranted = permissions.all { it.value }
-
-    if (!allGranted) {
-      Toast.makeText(this, "Izin akses media diperlukan untuk mengunggah file.", Toast.LENGTH_SHORT).show()
-      uploadCallback?.onReceiveValue(null)
-      uploadCallback = null
-      pendingChooser = null
-    } else {
-      pendingChooser?.let { params ->
-        launchFileChooser(params)
-      } ?: run {
-        Toast.makeText(this, "Izin berhasil diberikan, silakan ulangi tindakan Anda.", Toast.LENGTH_SHORT).show()
-      }
-    }
-  }
-
   override fun onCreate(savedInstanceState: Bundle?) {
-    setupWindow()
     super.onCreate(savedInstanceState)
 
+    enableEdgeToEdge(
+      statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+      navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+    )
     setupBackHandler()
 
     setContent {
       AppTheme {
-        val uiState by viewModel.uiState.collectAsState()
-
-        LaunchedEffect(uiState.isSplashVisible) {
-          val window = this@MainActivity.window
-          val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-
-          insetsController.isAppearanceLightStatusBars = false
-          insetsController.isAppearanceLightNavigationBars = false
-
-          if (uiState.isSplashVisible) {
-            window.statusBarColor = android.graphics.Color.parseColor("#18181B")
-            window.navigationBarColor = android.graphics.Color.parseColor("#09090B")
-          } else {
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
-          }
-        }
-
         MainScreen(
           viewModel = viewModel,
           activity = this,
@@ -133,6 +96,8 @@ class MainActivity : ComponentActivity() {
           onOpenPopup = { url -> openPopup(url) },
           activeDialog = activeDialog,
           onDismissDialog = { activeDialog = null },
+          showWelcomeDialog = showWelcomeDialog,
+          onDismissWelcome = { dismissWelcomeDialog() },
         )
       }
     }
@@ -143,13 +108,6 @@ class MainActivity : ComponentActivity() {
   override fun onSaveInstanceState(outState: Bundle) {
     super.onSaveInstanceState(outState)
     mainWebView?.saveState(outState)
-  }
-
-  private fun setupWindow() {
-    WindowCompat.setDecorFitsSystemWindows(window, false)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-    }
   }
 
   @SuppressLint("SetJavaScriptEnabled")
@@ -183,7 +141,7 @@ class MainActivity : ComponentActivity() {
     val webView = mainWebView ?: return
     if (touchX <= 0 && touchY <= 0) return
 
-    val javascriptCommand = String.format(imageDetectorJs, touchX, touchY)
+    val javascriptCommand = String.format(Locale.US, imageDetectorJs, touchX, touchY)
     webView.evaluateJavascript(javascriptCommand) { result ->
       val jsonObj = parseJsResult(result)
       val jsUrl = jsonObj?.optString("url")?.takeIf { it.isNotBlank() && it != "null" }
@@ -226,18 +184,13 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun parseJsResult(result: String?): JSONObject? {
-    if (result.isNullOrBlank() || result == "null") return null
-    var unescaped = result
-    if (unescaped.startsWith("\"") && unescaped.endsWith("\"")) {
-      try {
-        unescaped = org.json.JSONTokener(unescaped).nextValue() as? String ?: unescaped
-      } catch (_: Exception) {}
+    val raw = result?.takeUnless { it.isBlank() || it == "null" } ?: return null
+    val unescaped = if (raw.startsWith("\"") && raw.endsWith("\"")) {
+      runCatching { org.json.JSONTokener(raw).nextValue() as? String }.getOrNull() ?: raw
+    } else {
+      raw
     }
-    return try {
-      JSONObject(unescaped)
-    } catch (_: Exception) {
-      null
-    }
+    return runCatching { JSONObject(unescaped) }.getOrNull()
   }
 
   private fun setupBackHandler() {
@@ -265,23 +218,6 @@ class MainActivity : ComponentActivity() {
     }
   }
 
-  fun hasStoragePermission(): Boolean = when {
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
-      ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
-      ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-    else -> true
-  }
-
-  fun requestStoragePermission() {
-    val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
-    } else {
-      arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-    }
-    permissionLauncher.launch(requiredPermissions)
-  }
-
   fun launchFileChooser(params: WebChromeClient.FileChooserParams) {
     try {
       val fileIntent = params.createIntent().apply { addCategory(Intent.CATEGORY_OPENABLE) }
@@ -300,21 +236,12 @@ class MainActivity : ComponentActivity() {
   fun clearUpload() {
     uploadCallback?.onReceiveValue(null)
     uploadCallback = null
-    pendingChooser = null
   }
 
   fun openPopup(url: String) {
-    val newWebView = WebView(this).apply {
-      layoutParams = ViewGroup.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.MATCH_PARENT,
-      )
-      configureWebView(this)
-      webViewClient = AppWebViewClient(this@MainActivity)
-      webChromeClient = AppChromeClient(this@MainActivity)
-    }
+    val newWebView = createWebView(trackPageState = false)
+    showPopup(newWebView)
 
-    popupWebView = newWebView
     // Opening an image URL directly shows it at full pixel size (zoomed in), because the
     // WebView has wide-viewport off. Wrap it in a page that fits the image to the screen.
     val html = """
@@ -329,23 +256,44 @@ class MainActivity : ComponentActivity() {
     newWebView.loadDataWithBaseURL(url, html, "text/html", "UTF-8", null)
   }
 
+  private fun createWebView(trackPageState: Boolean): WebView = WebView(this).apply {
+    layoutParams = ViewGroup.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+    )
+    configureWebView(this)
+    webViewClient = AppWebViewClient(this@MainActivity, trackPageState)
+    webChromeClient = AppChromeClient(this@MainActivity, trackPageState)
+  }
+
+  private fun showPopup(webView: WebView) {
+    dismissPopup()
+    popupWebView = webView
+  }
+
   fun dismissPopup() {
-    popupWebView?.let { webView ->
-      webView.stopLoading()
-      webView.onPause()
-      webView.loadUrl("about:blank")
-      (webView.parent as? ViewGroup)?.removeView(webView)
-      webView.destroy()
-      popupWebView = null
-    }
+    val webView = popupWebView ?: return
+    popupWebView = null
+    webView.stopLoading()
+    webView.onPause()
+    webView.loadUrl("about:blank")
+    (webView.parent as? ViewGroup)?.removeView(webView)
+    webView.destroy()
   }
 
   private fun showWelcomeOnce() {
     val sharedPrefs = getSharedPreferences("Shinigami", MODE_PRIVATE)
     if (!sharedPrefs.getBoolean(PREF_WELCOME_SHOWN, false)) {
-      Toast.makeText(this, "Selamat Datang! Login dengan akun Google untuk membuka fitur premium secara gratis.", Toast.LENGTH_LONG).show()
-      sharedPrefs.edit().putBoolean(PREF_WELCOME_SHOWN, true).apply()
+      showWelcomeDialog = true
     }
+  }
+
+  private fun dismissWelcomeDialog() {
+    showWelcomeDialog = false
+    getSharedPreferences("Shinigami", MODE_PRIVATE)
+      .edit()
+      .putBoolean(PREF_WELCOME_SHOWN, true)
+      .apply()
   }
 
   override fun onPause() {
@@ -362,14 +310,11 @@ class MainActivity : ComponentActivity() {
 
   override fun onDestroy() {
     clearUpload()
+    runCatching { activeDialog?.result?.cancel() }
+    activeDialog = null
 
     mainWebView?.let { webView ->
       webView.stopLoading()
-      webView.onPause()
-      webView.pauseTimers()
-      webView.clearHistory()
-      webView.clearCache(false)
-      webView.clearFormData()
       webView.loadUrl("about:blank")
       (webView.parent as? ViewGroup)?.removeView(webView)
       webView.destroy()
@@ -381,7 +326,10 @@ class MainActivity : ComponentActivity() {
     super.onDestroy()
   }
 
-  class AppWebViewClient(activity: MainActivity) : WebViewClient() {
+  class AppWebViewClient(
+    activity: MainActivity,
+    private val trackPageState: Boolean = true,
+  ) : WebViewClient() {
     private val activityRef = WeakReference(activity)
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -390,47 +338,66 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-      val urlString = request.url.toString()
+      if (!request.isForMainFrame) return false
+
+      val url = request.url
+      val scheme = url.scheme.orEmpty()
+      if (scheme.equals("about", ignoreCase = true) || scheme.equals("data", ignoreCase = true)) return false
+      if (isInternalNavigation(url)) return false
+
       val activity = activityRef.get() ?: return false
-
-      if (isInternalNavigation(urlString)) return false
-
       return try {
-        activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlString)))
+        activity.startActivity(Intent(Intent.ACTION_VIEW, url))
         true
       } catch (e: Exception) {
-        Logger.e(TAG, e) { "Cannot launch external application for URL: $urlString" }
+        Logger.e(TAG, e) { "Cannot launch external application for URL: $url" }
         false
       }
     }
 
-    private fun isInternalNavigation(url: String): Boolean = url.contains("accounts.google.com") || url.contains("shinigami") || url.contains("shngm")
+    private fun isInternalNavigation(uri: Uri): Boolean {
+      val scheme = uri.scheme ?: return false
+      if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return false
+
+      val host = uri.host ?: return false
+      return isComicHost(host) || host.equals("accounts.google.com", ignoreCase = true)
+    }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
       super.onPageStarted(view, url, favicon)
-      val activity = activityRef.get() ?: return
-      activity.viewModel.onPageStarted()
+      if (trackPageState) activityRef.get()?.viewModel?.onPageStarted()
     }
 
     override fun onPageFinished(view: WebView, url: String) {
-      val activity = activityRef.get() ?: return
-      activity.viewModel.onPageFinished()
+      if (trackPageState) activityRef.get()?.viewModel?.onPageFinished()
       ErudaConsole.inject(view)
     }
 
     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-      if (request.isForMainFrame) {
-        Logger.w(TAG) { "Main frame failed to load: ${error.description}" }
-        activityRef.get()?.viewModel?.onPageFinished()
-      }
+      if (!request.isForMainFrame) return
+      Logger.w(TAG) { "Main frame failed to load: ${error.description}" }
+      if (trackPageState) activityRef.get()?.viewModel?.onPageLoadFailed()
+    }
+
+    override fun onReceivedHttpError(
+      view: WebView,
+      request: WebResourceRequest,
+      errorResponse: WebResourceResponse,
+    ) {
+      if (!request.isForMainFrame) return
+      Logger.w(TAG) { "Main frame HTTP ${errorResponse.statusCode} for ${request.url}" }
+      if (trackPageState) activityRef.get()?.viewModel?.onPageLoadFailed()
     }
   }
 
-  class AppChromeClient(activity: MainActivity) : WebChromeClient() {
+  class AppChromeClient(
+    activity: MainActivity,
+    private val trackPageState: Boolean = true,
+  ) : WebChromeClient() {
     private val activityRef = WeakReference(activity)
 
     override fun onProgressChanged(view: WebView, newProgress: Int) {
-      activityRef.get()?.viewModel?.onProgress(newProgress)
+      if (trackPageState) activityRef.get()?.viewModel?.onProgress(newProgress)
     }
 
     override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
@@ -469,36 +436,35 @@ class MainActivity : ComponentActivity() {
 
       activity.uploadCallback?.onReceiveValue(null)
       activity.uploadCallback = filePathCallback
-
-      if (!activity.hasStoragePermission()) {
-        activity.pendingChooser = fileChooserParams
-        activity.requestStoragePermission()
-        return true
-      }
-
       activity.launchFileChooser(fileChooserParams)
       return true
     }
 
     override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
       val activity = activityRef.get() ?: return false
-      val newWebView = WebView(activity).apply {
-        layoutParams = ViewGroup.LayoutParams(
-          ViewGroup.LayoutParams.MATCH_PARENT,
-          ViewGroup.LayoutParams.MATCH_PARENT,
-        )
-        activity.configureWebView(this)
-        webViewClient = AppWebViewClient(activity)
-        webChromeClient = this@AppChromeClient
+      val newWebView = activity.createWebView(trackPageState = false)
+
+      if (resultMsg == null) {
+        newWebView.destroy()
+        return false
       }
 
-      activity.popupWebView = newWebView
+      val transport = resultMsg.obj as? WebView.WebViewTransport
+      if (transport == null) {
+        newWebView.destroy()
+        return false
+      }
 
-      val transport = resultMsg?.obj as? WebView.WebViewTransport
-      transport?.webView = newWebView
-      resultMsg?.sendToTarget()
-
-      return true
+      return try {
+        activity.showPopup(newWebView)
+        transport.webView = newWebView
+        resultMsg.sendToTarget()
+        true
+      } catch (e: Exception) {
+        Logger.e(TAG, e) { "Cannot create popup window" }
+        activity.dismissPopup()
+        false
+      }
     }
   }
 
