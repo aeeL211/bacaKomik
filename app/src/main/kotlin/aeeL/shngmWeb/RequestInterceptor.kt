@@ -10,10 +10,11 @@ import java.io.ByteArrayInputStream
 import java.util.Locale
 
 /**
- * Handles every request that must not reach the network, or whose HTML body needs a patch.
+ * Handles every request that must not reach the network, or whose body needs a patch.
  *
  * Synthetic responses are checked first because they are cheap and do not allocate a request.
- * Only main-frame HTML requests for the comic hosts are fetched with OkHttp.
+ * Only GET responses that can carry the premium flag are fetched with OkHttp: main-frame HTML,
+ * SvelteKit data payloads, and user API calls.
  */
 class RequestInterceptor {
 
@@ -24,7 +25,7 @@ class RequestInterceptor {
   @Volatile var userAgent: String? = null
 
   private val cookies = CookieManager.getInstance()
-  private val htmlClient = Http.client.newBuilder()
+  private val patchClient = Http.client.newBuilder()
     .followRedirects(false)
     .followSslRedirects(false)
     .build()
@@ -37,8 +38,8 @@ class RequestInterceptor {
 
     syntheticResponse(request, host, path)?.let { return it }
 
-    if (!shouldPatchHtml(request, host)) return null
-    return fetchAndPatch(request)
+    val kind = patchKind(request, host, path) ?: return null
+    return fetchAndPatch(request, kind)
   }
 
   private fun syntheticResponse(
@@ -67,17 +68,26 @@ class RequestInterceptor {
     else -> emptyResponse("text/plain")
   }
 
-  private fun shouldPatchHtml(request: WebResourceRequest, host: String): Boolean {
-    if (!request.isForMainFrame) return false
-    val method = request.method ?: return false
-    if (!method.equals("GET", ignoreCase = true)) return false
-    if (!isComicHost(host)) return false
+  private fun patchKind(request: WebResourceRequest, host: String, path: String): PatchKind? {
+    val method = request.method ?: return null
+    if (!method.equals("GET", ignoreCase = true)) return null
+    if (!isComicHost(host)) return null
 
-    val accept = request.requestHeaders.header("Accept")
-    return accept == null || accept.contains("text/html", ignoreCase = true)
+    return when {
+      path.endsWith(DATA_SUFFIX) -> PatchKind.JSON
+
+      host == API_HOST && path.startsWith(USER_PATH) -> PatchKind.JSON
+
+      request.isForMainFrame -> {
+        val accept = request.requestHeaders.header("Accept")
+        if (accept == null || accept.contains("text/html", ignoreCase = true)) PatchKind.HTML else null
+      }
+
+      else -> null
+    }
   }
 
-  private fun fetchAndPatch(request: WebResourceRequest): WebResourceResponse? {
+  private fun fetchAndPatch(request: WebResourceRequest, kind: PatchKind): WebResourceResponse? {
     val url = request.url.toString()
     val startedAt = System.currentTimeMillis()
 
@@ -86,7 +96,7 @@ class RequestInterceptor {
         .url(url)
         .get()
         .header("Accept-Language", language)
-        .header("Accept", request.requestHeaders.header("Accept") ?: DEFAULT_ACCEPT)
+        .header("Accept", request.requestHeaders.header("Accept") ?: kind.defaultAccept)
 
       userAgent?.let { builder.header("User-Agent", it) }
       cookies.getCookie(url)?.takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
@@ -97,48 +107,61 @@ class RequestInterceptor {
         }
       }
 
-      htmlClient.newCall(builder.build()).execute().use { response ->
+      patchClient.newCall(builder.build()).execute().use { response ->
         if (!response.isSuccessful) {
           Logger.w(TAG) { "HTTP ${response.code} for $url" }
           return null
         }
 
         val contentType = response.header("Content-Type").orEmpty()
-        if (!contentType.contains("html", ignoreCase = true)) {
-          Logger.w(TAG) { "Not HTML (${contentType.ifEmpty { "unknown" }}) for $url" }
+        if (!kind.matches(contentType)) {
+          Logger.w(TAG) { "Unexpected content type (${contentType.ifEmpty { "unknown" }}) for $url" }
+          return null
+        }
+
+        val declaredLength = response.body.contentLength()
+        if (declaredLength > MAX_BODY_BYTES) {
+          Logger.w(TAG) { "Body too large ($declaredLength bytes) for $url" }
           return null
         }
 
         val finalUrl = response.request.url.toString()
         response.headers("Set-Cookie").forEach { cookies.setCookie(finalUrl, it) }
 
-        val html = patchPremium(response.body.string())
+        val body = response.body.bytes()
+        if (body.size.toLong() > MAX_BODY_BYTES) {
+          Logger.w(TAG) { "Body too large (${body.size} bytes) for $url" }
+          return null
+        }
+
+        val patched = PremiumPatcher.patch(body)
+        if (patched > 0) {
+          Logger.d(TAG) { "Patched $patched is_premium flag(s) on $url" }
+        }
+
+        val mimeType = contentType.substringBefore(';').trim().ifEmpty { kind.defaultMime }
         val headers = buildMap {
-          put("Content-Type", contentType.substringBefore(';').trim().ifEmpty { "text/html" })
+          put("Content-Type", mimeType)
           response.header("Cache-Control")?.let { put("Cache-Control", it) }
           response.header("Content-Language")?.let { put("Content-Language", it) }
+          if (kind == PatchKind.JSON) putAll(corsHeaders(request))
         }
 
         Logger.logNetwork("GET", url, response.code, System.currentTimeMillis() - startedAt)
 
         WebResourceResponse(
-          headers["Content-Type"] ?: "text/html",
+          mimeType,
           "UTF-8",
           response.code,
           response.message.ifEmpty { "OK" },
           headers,
-          ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)),
+          ByteArrayInputStream(body),
         )
       }
     } catch (e: Exception) {
       Logger.e(TAG, e) { "Failed to patch $url" }
       null
     }
-  }
-
-  private fun patchPremium(html: String): String {
-    if (!html.contains("is_premium")) return html
-    return PREMIUM_FLAG.replace(html) { match -> match.groupValues[1] + "true" }
   }
 
   private fun jsonResponse(request: WebResourceRequest, body: ByteArray): WebResourceResponse {
@@ -150,8 +173,7 @@ class RequestInterceptor {
     }
   }
 
-  private fun emptyResponse(mimeType: String): WebResourceResponse =
-    WebResourceResponse(mimeType, "utf-8", 200, "OK", emptyMap(), emptyStream())
+  private fun emptyResponse(mimeType: String): WebResourceResponse = WebResourceResponse(mimeType, "utf-8", 200, "OK", emptyMap(), emptyStream())
 
   private fun corsHeaders(request: WebResourceRequest): Map<String, String> {
     val origin = request.requestHeaders.header("Origin")
@@ -166,17 +188,18 @@ class RequestInterceptor {
 
   private fun emptyStream() = ByteArrayInputStream(EMPTY_BYTES)
 
-  private fun adResponse(pageId: String): ByteArray =
-    """{"message":"success","meta":{"request_id":"","timestamp":0,"process_time":"0ms"},"data":[{"page_id":"$pageId","sections":[{"section_id":1,"section_num":1,"layout":{"rows":1,"columns":1},"type":"fixed","ads":[]}]}]}"""
-      .toByteArray(Charsets.UTF_8)
+  private fun adResponse(pageId: String): ByteArray = """{"message":"success","meta":{"request_id":"","timestamp":0,"process_time":"0ms"},"data":[{"page_id":"$pageId","sections":[{"section_id":1,"section_num":1,"layout":{"rows":1,"columns":1},"type":"fixed","ads":[]}]}]}"""
+    .toByteArray(Charsets.UTF_8)
 
-  private fun Map<String, String>.header(name: String): String? =
-    entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+  private fun Map<String, String>.header(name: String): String? = entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
   companion object {
     private const val TAG = "RequestInterceptor"
     private const val ANNOUNCEMENT_ID = "8dfa0456-9c8a-4f0e-a1de-5153a26e13e5"
-    private const val DEFAULT_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    private const val API_HOST = "api.shngm.io"
+    private const val USER_PATH = "/v1/user"
+    private const val DATA_SUFFIX = "/__data.json"
+    private const val MAX_BODY_BYTES = 8L * 1024 * 1024
 
     private val SKIPPED_HEADERS = setOf(
       "host",
@@ -191,9 +214,6 @@ class RequestInterceptor {
       "if-range",
       "range",
     )
-
-    // Handles "is_premium":false, is_premium:false, 'is_premium': false and is_premium=!1.
-    private val PREMIUM_FLAG = Regex("""(?<key>["']?is_premium["']?\s*[:=]\s*)(?:false|!1)""")
 
     private val EMPTY_BYTES = ByteArray(0)
 
@@ -245,5 +265,20 @@ class RequestInterceptor {
       .put("data", JSONArray().put(ANNOUNCEMENT_ITEM))
       .toString()
       .toByteArray(Charsets.UTF_8)
+  }
+
+  /** Response families that can carry the premium flag. */
+  private enum class PatchKind(
+    val defaultMime: String,
+    val defaultAccept: String,
+  ) {
+    HTML("text/html", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+    JSON("application/json", "application/json, */*;q=0.8"),
+    ;
+
+    fun matches(contentType: String): Boolean = when (this) {
+      HTML -> contentType.contains("html", ignoreCase = true)
+      JSON -> contentType.contains("json", ignoreCase = true)
+    }
   }
 }
