@@ -10,7 +10,22 @@ internal val COMIC_HOSTS = setOf(
   "shngm.id",
 )
 
-internal fun isComicHost(host: String?): Boolean {
+/** Login and OAuth hosts that must stay inside the WebView. */
+private val AUTH_HOSTS = setOf(
+  // Supabase auth gateway used by the Google login flow.
+  "kratos.shinigami.io",
+  // Google OAuth pages.
+  "accounts.google.com",
+)
+
+/** Comic and auth hosts that must stay inside the WebView. */
+internal val INTERNAL_HOSTS = COMIC_HOSTS + AUTH_HOSTS
+
+internal fun isComicHost(host: String?): Boolean = matchesHost(host, COMIC_HOSTS)
+
+internal fun isInternalHost(host: String?): Boolean = matchesHost(host, INTERNAL_HOSTS)
+
+private fun matchesHost(host: String?, hosts: Set<String>): Boolean {
   val normalized = host?.lowercase(Locale.ROOT) ?: return false
-  return COMIC_HOSTS.any { normalized == it || normalized.endsWith(".$it") }
+  return hosts.any { normalized == it || normalized.endsWith(".$it") }
 }

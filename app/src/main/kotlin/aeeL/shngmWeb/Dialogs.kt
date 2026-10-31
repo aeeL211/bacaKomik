@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +34,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 sealed interface DialogType {
   val message: String
@@ -53,6 +60,19 @@ sealed interface DialogType {
     val defaultValue: String,
     override val result: JsPromptResult,
   ) : DialogType
+}
+
+/** Keeps the status bar hidden while a dialog window is visible. */
+@Composable
+private fun HideStatusBarInDialog() {
+  val view = LocalView.current
+  DisposableEffect(view) {
+    val window = (view.parent as? DialogWindowProvider)?.window
+    val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+    controller?.hide(WindowInsetsCompat.Type.statusBars())
+    controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    onDispose { }
+  }
 }
 
 /** Themed replacement for the WebView's JS alert / confirm / prompt dialogs. */
@@ -91,6 +111,7 @@ fun AppDialog(
       decorFitsSystemWindows = false,
     ),
   ) {
+    HideStatusBarInDialog()
     Box(
       modifier = Modifier
         .fillMaxSize()
@@ -174,15 +195,27 @@ fun WelcomeDialog(onDismiss: () -> Unit) {
     title = {
       Text(
         text = "Fitur Premium",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
         fontWeight = FontWeight.Bold,
       )
     },
     text = {
-      Text(text = "Login dengan akun Google untuk membuka fitur premium secara gratis.")
+      HideStatusBarInDialog()
+      Text(
+        text = "Login dengan akun Google untuk membuka fitur premium secara gratis.",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+      )
     },
     confirmButton = {
-      TextButton(onClick = onDismiss) {
-        Text(text = "Mengerti", color = PrimaryAccent)
+      Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+      ) {
+        TextButton(onClick = onDismiss) {
+          Text(text = "Mengerti", color = PrimaryAccent)
+        }
       }
     },
   )

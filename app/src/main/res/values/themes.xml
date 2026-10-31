@@ -9,6 +9,7 @@
     </style>
 
     <style name="AppTheme.FullScreen" parent="AppTheme">
+        <item name="android:windowFullscreen">true</item>
         <item name="android:windowBackground">#18181B</item>
     </style>
 </resources>

@@ -28,6 +28,9 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.util.Locale
@@ -79,6 +82,13 @@ class MainActivity : ComponentActivity() {
       statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
       navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
     )
+
+    // The status bar stays hidden; a swipe can still reveal it temporarily.
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+      hide(WindowInsetsCompat.Type.statusBars())
+      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+
     setupBackHandler()
 
     setContent {
@@ -360,7 +370,7 @@ class MainActivity : ComponentActivity() {
       if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return false
 
       val host = uri.host ?: return false
-      return isComicHost(host) || host.equals("accounts.google.com", ignoreCase = true)
+      return isInternalHost(host)
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
