@@ -12,8 +12,8 @@ android {
     applicationId = "aeeL.shngmWeb"
     minSdk = 24
     targetSdk = 37
-    versionCode = 3
-    versionName = "1.8.0"
+    versionCode = 4
+    versionName = "1.8.1"
 
     androidResources {
       localeFilters.addAll(listOf("en", "in"))
