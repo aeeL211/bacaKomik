@@ -42,9 +42,16 @@ object ImageCache {
     synchronized(this) {
       if (initialized) return
 
-      val cache = Cache(File(context.cacheDir, "image_cache"), CACHE_SIZE)
-      imageClient = Http.client.newBuilder()
-        .cache(cache)
+      val diskCache = try {
+        Cache(File(context.cacheDir, "image_cache"), CACHE_SIZE)
+      } catch (e: Exception) {
+        Logger.e(TAG, e) { "Cannot create image cache, continuing without disk cache" }
+        null
+      }
+
+      val builder = Http.client.newBuilder()
+      diskCache?.let { builder.cache(it) }
+      imageClient = builder
         .addNetworkInterceptor(cacheHeaders)
         .build()
       initialized = true
@@ -66,10 +73,16 @@ object ImageCache {
 
     val path = url.path.orEmpty().lowercase(Locale.ROOT)
     val looksLikeImage = IMAGE_EXTENSIONS.any { path.endsWith(it) }
+
+    val headers = request.requestHeaders
+    val destination = headers.entries
+      .firstOrNull { it.key.equals("Sec-Fetch-Dest", ignoreCase = true) }
+      ?.value
+    if (destination.equals("image", ignoreCase = true)) return true
     if (request.isForMainFrame) return looksLikeImage
     if (looksLikeImage) return true
 
-    val accept = request.requestHeaders.entries
+    val accept = headers.entries
       .firstOrNull { it.key.equals("Accept", ignoreCase = true) }
       ?.value
       .orEmpty()
@@ -81,6 +94,15 @@ object ImageCache {
     if (!shouldHandle(request)) return null
 
     val url = request.url.toString()
+    return try {
+      intercept(url, request)
+    } catch (e: Exception) {
+      Logger.e(TAG, e) { "Image interception failed for $url" }
+      null
+    }
+  }
+
+  private fun intercept(url: String, request: WebResourceRequest): WebResourceResponse? {
     val builder = requestBuilder(url)
     request.requestHeaders.forEach { (name, value) ->
       if (name.lowercase(Locale.ROOT) !in SKIPPED_HEADERS) builder.header(name, value)
@@ -102,34 +124,41 @@ object ImageCache {
       }
     }
 
-    val contentType = response.header("Content-Type").orEmpty()
-    if (!response.isSuccessful || !contentType.startsWith("image/", ignoreCase = true)) {
+    try {
+      val contentType = response.header("Content-Type").orEmpty()
+      if (!response.isSuccessful || !contentType.startsWith("image/", ignoreCase = true)) {
+        response.close()
+        return null
+      }
+
+      val headers = buildMap {
+        put("Content-Type", contentType)
+        response.header("Cache-Control")?.let { put("Cache-Control", it) }
+        response.header("ETag")?.let { put("ETag", it) }
+        response.header("Access-Control-Allow-Origin")?.let { put("Access-Control-Allow-Origin", it) }
+        response.header("Access-Control-Allow-Credentials")?.let { put("Access-Control-Allow-Credentials", it) }
+      }
+
+      // The WebView normally forwards these; we replaced the request, so do it ourselves.
+      runCatching {
+        response.headers("Set-Cookie").forEach { cookie ->
+          CookieManager.getInstance().setCookie(url, cookie)
+        }
+      }
+
+      // Closing this stream also closes the OkHttp response. The WebView owns it from here.
+      return WebResourceResponse(
+        contentType.substringBefore(';').trim(),
+        null,
+        response.code,
+        response.message.ifEmpty { "OK" },
+        headers,
+        response.body.byteStream(),
+      )
+    } catch (e: Exception) {
       response.close()
-      return null
+      throw e
     }
-
-    val headers = buildMap {
-      put("Content-Type", contentType)
-      response.header("Cache-Control")?.let { put("Cache-Control", it) }
-      response.header("ETag")?.let { put("ETag", it) }
-      response.header("Access-Control-Allow-Origin")?.let { put("Access-Control-Allow-Origin", it) }
-      response.header("Access-Control-Allow-Credentials")?.let { put("Access-Control-Allow-Credentials", it) }
-    }
-
-    // The WebView normally forwards these; we replaced the request, so do it ourselves.
-    response.headers("Set-Cookie").forEach { cookie ->
-      CookieManager.getInstance().setCookie(url, cookie)
-    }
-
-    // Closing this stream also closes the OkHttp response. The WebView owns it from here.
-    return WebResourceResponse(
-      contentType.substringBefore(';').trim(),
-      null,
-      response.code,
-      response.message.ifEmpty { "OK" },
-      headers,
-      response.body.byteStream(),
-    )
   }
 
   /** Reads an image through the same cache; used by the long-press preview. */
