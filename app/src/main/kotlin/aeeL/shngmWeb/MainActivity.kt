@@ -369,8 +369,12 @@ class MainActivity : ComponentActivity() {
       val scheme = uri.scheme ?: return false
       if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return false
 
-      val host = uri.host ?: return false
-      return isInternalHost(host)
+      // Keep the original URL-based rule: the login host contains "shinigami",
+      // so it stays in the WebView along with the comic hosts.
+      val url = uri.toString()
+      return url.contains("accounts.google.com") ||
+        url.contains("shinigami") ||
+        url.contains("shngm")
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {

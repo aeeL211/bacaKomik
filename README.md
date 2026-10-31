@@ -13,9 +13,7 @@ Aplikasi Android berbasis **Kotlin** dan **Jetpack Compose Material 3** yang mem
 
 - WebView edge-to-edge dengan tema gelap, navigasi back, popup gambar, upload file lewat SAF, dan dialog JS bergaya Material 3.
 - Dialog premium sekali saja: arahan login Google untuk membuka fitur premium ditampilkan sebagai dialog setelah splash, bukan toast. Preferensi disimpan saat dialog ditutup.
-- Login Google tetap di dalam WebView: `kratos.shinigami.io` (gateway auth Supabase) dan `accounts.google.com` masuk daftar host internal, jadi tidak dilempar ke browser. Tautan non-komik/non-auth tetap dibuka di aplikasi eksternal.
-- Status bar disembunyikan di activity dan dialog; swipe dari atas hanya menampilkannya sementara.
-- Pull-to-refresh native memakai `SwipeRefreshLayout`; indikator muncul di bagian atas layar dan hanya aktif saat halaman berada di paling atas.
+- Pull-to-refresh native memakai `SwipeRefreshLayout`; indikator muncul di bawah status bar dan hanya aktif saat halaman berada di paling atas.
 - `RequestInterceptor` terpadu:
   - memblokir iklan (`ads.shinigami`), Google Tag Manager, dan Novu;
   - mengganti respons API pengumuman dengan data lokal;
@@ -67,7 +65,7 @@ app/src/main/kotlin/aeeL/shngmWeb/
 ├── ContextMenuBottomSheet.kt    # menu long-press gambar + preview
 ├── Dialogs.kt                   # dialog JS dan dialog premium sekali saja
 ├── ErudaConsole.kt              # injeksi Eruda (opsional)
-├── Hosts.kt                     # host komik + host login yang dipakai bersama
+├── Hosts.kt                     # daftar host komik yang dipakai bersama
 ├── Http.kt                      # OkHttpClient bersama
 ├── ImageCache.kt                # cache gambar disk + fallback offline
 ├── Logger.kt                    # log Android + file rotasi
@@ -96,7 +94,6 @@ Aset JS untuk deteksi gambar ada di `app/src/main/assets/js/image_detector.js`.
 5. **Long-press gambar**: koordinat sentuhan dikirim ke `image_detector.js`; URL gambar ditampilkan di bottom sheet bersama preview yang sudah di-downsample.
 6. **Upload file**: WebView membuka file picker SAF (`ACTION_GET_CONTENT` / `ACTION_OPEN_DOCUMENT`), jadi aplikasi tidak meminta izin penyimpanan.
 7. **Dialog premium**: setelah splash hilang, dialog arahan login Google ditampilkan satu kali dan preferensinya disimpan saat ditutup.
-8. **Login Google**: tautan login menuju `kratos.shinigami.io`, lalu Google OAuth di `accounts.google.com`, dan kembali ke `kratos.shinigami.io`. Kedua host tetap dimuat di WebView; host lain dibuka lewat browser.
 
 ## Konfigurasi URL Remote
 
