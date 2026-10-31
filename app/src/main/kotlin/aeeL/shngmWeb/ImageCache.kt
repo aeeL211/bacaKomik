@@ -1,0 +1,251 @@
+package aeeL.shngmWeb
+
+import android.content.Context
+import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import okhttp3.Cache
+import okhttp3.CacheControl
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.File
+import java.io.IOException
+import java.util.Locale
+
+/**
+ * Disk-backed cache for every image the WebView and the preview sheet load.
+ *
+ * OkHttp owns the cache file, so eviction, validators and concurrent access are handled for us.
+ * Comic CDNs usually send no-store, which is why a reload used to download every page again; the
+ * network interceptor rewrites that header for images only. The cache lives in cacheDir, so it
+ * survives app restarts but can still be cleared by the system when storage runs low.
+ */
+object ImageCache {
+
+  private const val TAG = "ImageCache"
+  private const val CACHE_SIZE = 256L * 1024 * 1024
+  private const val MAX_AGE_SECONDS = 7L * 24 * 60 * 60
+  private const val IMAGE_ACCEPT = "image/webp,image/apng,image/*,*/*;q=0.8"
+
+  /** Kept in sync with RequestInterceptor so both clients look like the same browser. */
+  @Volatile var language: String = Locale.getDefault().toLanguageTag()
+
+  @Volatile var userAgent: String? = null
+
+  /** Hint from NetworkMonitor, so offline images go straight to the disk cache. */
+  @Volatile var isOnline: Boolean = true
+
+  @Volatile private var initialized = false
+  private lateinit var imageClient: OkHttpClient
+
+  fun init(context: Context) {
+    if (initialized) return
+
+    synchronized(this) {
+      if (initialized) return
+
+      val diskCache = try {
+        Cache(File(context.cacheDir, "image_cache"), CACHE_SIZE)
+      } catch (e: Exception) {
+        Logger.e(TAG, e) { "Cannot create image cache, continuing without disk cache" }
+        null
+      }
+
+      val builder = Http.client.newBuilder()
+      diskCache?.let { builder.cache(it) }
+      imageClient = builder
+        .addNetworkInterceptor(cacheHeaders)
+        .build()
+      initialized = true
+    }
+  }
+
+  val client: OkHttpClient
+    get() {
+      check(initialized) { "ImageCache.init() must be called first" }
+      return imageClient
+    }
+
+  /** True for plain image GETs; everything else is left to the WebView. */
+  fun shouldHandle(request: WebResourceRequest): Boolean {
+    val url = request.url
+    if (url.scheme != "http" && url.scheme != "https") return false
+    if (!request.method.equals("GET", ignoreCase = true)) return false
+    if (request.requestHeaders.keys.any { it.equals("Range", ignoreCase = true) }) return false
+
+    val host = url.host?.lowercase(Locale.ROOT) ?: return false
+    if (NON_CACHEABLE_HOSTS.any { host == it || host.endsWith(".$it") }) return false
+
+    val path = url.path.orEmpty().lowercase(Locale.ROOT)
+    val extension = path.substringAfterLast('.', "")
+    val looksLikeImage = extension.isNotEmpty() && extension in IMAGE_EXTENSIONS
+
+    val headers = request.requestHeaders
+    val destination = headers.entries
+      .firstOrNull { it.key.equals("Sec-Fetch-Dest", ignoreCase = true) }
+      ?.value
+    if (destination.equals("image", ignoreCase = true)) return true
+    if (request.isForMainFrame) return looksLikeImage
+    if (looksLikeImage) return true
+
+    val accept = headers.entries
+      .firstOrNull { it.key.equals("Accept", ignoreCase = true) }
+      ?.value
+      .orEmpty()
+    return accept.contains("image/", ignoreCase = true)
+  }
+
+  /** Serves the image from disk, or downloads it once. Null means "let the WebView load it". */
+  fun intercept(request: WebResourceRequest): WebResourceResponse? {
+    if (!shouldHandle(request)) return null
+
+    val url = request.url.toString()
+    return try {
+      intercept(url, request)
+    } catch (e: Exception) {
+      Logger.e(TAG, e) { "Image interception failed for $url" }
+      null
+    }
+  }
+
+  private fun intercept(url: String, request: WebResourceRequest): WebResourceResponse? {
+    val builder = requestBuilder(url)
+    request.requestHeaders.forEach { (name, value) ->
+      if (name.lowercase(Locale.ROOT) !in SKIPPED_HEADERS) builder.header(name, value)
+    }
+
+    val response = fetch(url, builder) ?: return null
+
+    try {
+      val contentType = response.header("Content-Type").orEmpty()
+      if (!response.isSuccessful || !contentType.startsWith("image/", ignoreCase = true)) {
+        response.close()
+        return null
+      }
+
+      val headers = buildMap {
+        put("Content-Type", contentType)
+        response.header("Cache-Control")?.let { put("Cache-Control", it) }
+        response.header("ETag")?.let { put("ETag", it) }
+        response.header("Access-Control-Allow-Origin")?.let { put("Access-Control-Allow-Origin", it) }
+        response.header("Access-Control-Allow-Credentials")?.let { put("Access-Control-Allow-Credentials", it) }
+      }
+
+      // The WebView normally forwards these; we replaced the request, so do it ourselves.
+      runCatching {
+        response.headers("Set-Cookie").forEach { cookie ->
+          CookieManager.getInstance().setCookie(url, cookie)
+        }
+      }
+
+      // Closing this stream also closes the OkHttp response. The WebView owns it from here.
+      return WebResourceResponse(
+        contentType.substringBefore(';').trim(),
+        null,
+        response.code,
+        response.message.ifEmpty { "OK" },
+        headers,
+        response.body.byteStream(),
+      )
+    } catch (e: Exception) {
+      response.close()
+      throw e
+    }
+  }
+
+  /** Reads the image through the same cache; used by the long-press preview. */
+  fun openBytes(url: String): ByteArray? {
+    return try {
+      val response = fetch(url, requestBuilder(url)) ?: return null
+      response.use { if (it.isSuccessful) it.body.bytes() else null }
+    } catch (e: Exception) {
+      Logger.w(TAG) { "Preview load failed for $url: ${e.message}" }
+      null
+    }
+  }
+
+  private fun fetch(url: String, builder: Request.Builder): Response? {
+    if (!isOnline) return fromCache(builder)
+
+    return try {
+      client.newCall(builder.build()).execute()
+    } catch (e: IOException) {
+      Logger.w(TAG) { "Image request failed, using cache for $url: ${e.message}" }
+      fromCache(builder)
+    }
+  }
+
+  private fun fromCache(builder: Request.Builder): Response? = try {
+    client.newCall(
+      builder.build().newBuilder()
+        .cacheControl(CacheControl.FORCE_CACHE)
+        .build(),
+    ).execute()
+  } catch (e: IOException) {
+    Logger.w(TAG) { "No cached image: ${e.message}" }
+    null
+  }
+
+  private fun requestBuilder(url: String): Request.Builder {
+    val builder = Request.Builder()
+      .url(url)
+      .get()
+      .header("Accept", IMAGE_ACCEPT)
+      .header("Accept-Language", language)
+
+    userAgent?.let { builder.header("User-Agent", it) }
+    CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotEmpty() }?.let {
+      builder.header("Cookie", it)
+    }
+
+    return builder
+  }
+
+  private val cacheHeaders = Interceptor { chain ->
+    val response = chain.proceed(chain.request())
+    val contentType = response.header("Content-Type").orEmpty()
+
+    if (response.isSuccessful && contentType.startsWith("image/", ignoreCase = true)) {
+      response.newBuilder()
+        .removeHeader("Pragma")
+        .removeHeader("Expires")
+        .header("Cache-Control", "private, max-age=$MAX_AGE_SECONDS, immutable")
+        .build()
+    } else {
+      response
+    }
+  }
+
+  private val IMAGE_EXTENSIONS = setOf(
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "avif",
+    "bmp",
+    "svg",
+  )
+
+  /** Challenge/widget hosts whose images can change at any time. */
+  private val NON_CACHEABLE_HOSTS = setOf("challenges.cloudflare.com")
+
+  private val SKIPPED_HEADERS = setOf(
+    "host",
+    "connection",
+    "content-length",
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "user-agent",
+    "cookie",
+    "cache-control",
+    "pragma",
+    "range",
+    "if-none-match",
+    "if-modified-since",
+    "if-range",
+  )
+}
