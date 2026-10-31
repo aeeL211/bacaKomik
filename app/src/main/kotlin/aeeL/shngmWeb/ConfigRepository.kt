@@ -1,6 +1,7 @@
 package aeeL.shngmWeb
 
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,7 +53,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         }
 
         if (fetched != fallback) {
-          prefs.edit().putString(KEY_URL, fetched).apply()
+          prefs.edit { putString(KEY_URL, fetched) }
           Logger.i(TAG) { "Remote url updated: $fetched" }
         }
         fetched

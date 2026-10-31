@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.util.Base64
@@ -67,6 +66,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -264,7 +264,7 @@ fun ContextMenuBottomSheet(
           onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             safeAction(context) {
-              val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+              val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return@safeAction
               clipboard.setPrimaryClip(ClipData.newPlainText("URL", url))
               Toast.makeText(context, "Tautan disalin", Toast.LENGTH_SHORT).show()
             }
@@ -291,7 +291,7 @@ fun ContextMenuBottomSheet(
         onClick = {
           haptic.performHapticFeedback(HapticFeedbackType.LongPress)
           safeAction(context) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
           }
           onDismissRequest()
         },
@@ -375,7 +375,7 @@ private fun downloadImage(context: Context, url: String) {
     .lowercase(Locale.ROOT)
     .takeIf { it in DOWNLOAD_EXTENSIONS } ?: "jpg"
 
-  val request = DownloadManager.Request(Uri.parse(url))
+  val request = DownloadManager.Request(url.toUri())
     .setTitle("Mengunduh Gambar")
     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
 
@@ -387,7 +387,8 @@ private fun downloadImage(context: Context, url: String) {
     request.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_PICTURES, fileName)
   }
 
-  val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+  val downloadManager = context.getSystemService(DownloadManager::class.java)
+    ?: error("DownloadManager tidak tersedia")
   downloadManager.enqueue(request)
   Toast.makeText(context, "Proses unduh dimulai...", Toast.LENGTH_SHORT).show()
 }

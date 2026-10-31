@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.callbackFlow
 class NetworkMonitor(context: Context) {
 
   private val connectivityManager =
-    context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    context.applicationContext.getSystemService(ConnectivityManager::class.java)
+      ?: error("ConnectivityManager tidak tersedia")
 
   val networkStatus: Flow<Boolean> = callbackFlow {
     val callback = object : ConnectivityManager.NetworkCallback() {
