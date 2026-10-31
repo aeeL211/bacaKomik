@@ -1,12 +1,13 @@
 package aeeL.shngmWeb
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Message
 import android.provider.OpenableColumns
-import android.text.TextUtils
+import android.text.Html
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JsPromptResult
@@ -21,8 +22,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,8 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -158,8 +161,8 @@ class MainActivity : ComponentActivity() {
       javaScriptCanOpenWindowsAutomatically = true
       cacheMode = WebSettings.LOAD_DEFAULT
       mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-      allowFileAccess = true
-      allowContentAccess = true
+      // The app never loads local files; keep the WebView sandbox closed.
+      allowFileAccess = false
 
       userAgentString = userAgentString.replace("; wv", "")
     }
@@ -227,18 +230,13 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun setupBackHandler() {
-    onBackPressedDispatcher.addCallback(
-      this,
-      object : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-          when {
-            popupWebView != null -> dismissPopup()
-            mainWebView?.canGoBack() == true -> mainWebView?.goBack()
-            else -> confirmExit()
-          }
-        }
-      },
-    )
+    onBackPressedDispatcher.addCallback(this) {
+      when {
+        popupWebView != null -> dismissPopup()
+        mainWebView?.canGoBack() == true -> mainWebView?.goBack()
+        else -> confirmExit()
+      }
+    }
   }
 
   private fun confirmExit() {
@@ -252,15 +250,16 @@ class MainActivity : ComponentActivity() {
   }
 
   fun launchFileChooser(params: WebChromeClient.FileChooserParams) {
+    val fileIntent = params.createIntent().apply { addCategory(Intent.CATEGORY_OPENABLE) }
     try {
-      val fileIntent = params.createIntent().apply { addCategory(Intent.CATEGORY_OPENABLE) }
-      if (fileIntent.resolveActivity(packageManager) != null) {
-        filePickerLauncher.launch(fileIntent)
-      } else {
-        Toast.makeText(this, "Aplikasi manajer file tidak ditemukan di perangkat ini.", Toast.LENGTH_SHORT).show()
-        clearUpload()
-      }
+      // Launch directly instead of resolveActivity(): package visibility on Android 11+
+      // can hide a perfectly valid document picker from the query.
+      filePickerLauncher.launch(fileIntent)
+    } catch (e: ActivityNotFoundException) {
+      Toast.makeText(this, "Aplikasi manajer file tidak ditemukan di perangkat ini.", Toast.LENGTH_SHORT).show()
+      clearUpload()
     } catch (e: Exception) {
+      Logger.e(TAG, e) { "Cannot launch file chooser" }
       Toast.makeText(this, "Gagal membuka jendela pemilihan file.", Toast.LENGTH_SHORT).show()
       clearUpload()
     }
@@ -284,7 +283,7 @@ class MainActivity : ComponentActivity() {
   }
 
   private fun isAvatarUpload(webView: WebView, params: WebChromeClient.FileChooserParams): Boolean {
-    val path = runCatching { Uri.parse(webView.url.orEmpty()).path.orEmpty() }.getOrDefault("")
+    val path = runCatching { webView.url?.toUri()?.path.orEmpty() }.getOrDefault("")
     if (!path.startsWith("/setting") && !path.startsWith("/settings")) return false
 
     val accept = params.acceptTypes.joinToString(" ").lowercase(Locale.ROOT)
@@ -433,7 +432,7 @@ class MainActivity : ComponentActivity() {
         body { display: flex; align-items: center; justify-content: center; }
         img { max-width: 100%; max-height: 100%; object-fit: contain; }
       </style>
-      <img src="${TextUtils.htmlEncode(url)}">
+      <img src="${Html.escapeHtml(url)}">
     """.trimIndent()
     newWebView.loadDataWithBaseURL(url, html, "text/html", "UTF-8", null)
   }
@@ -472,10 +471,9 @@ class MainActivity : ComponentActivity() {
 
   private fun dismissWelcomeDialog() {
     showWelcomeDialog = false
-    getSharedPreferences("Shinigami", MODE_PRIVATE)
-      .edit()
-      .putBoolean(PREF_WELCOME_SHOWN, true)
-      .apply()
+    getSharedPreferences("Shinigami", MODE_PRIVATE).edit {
+      putBoolean(PREF_WELCOME_SHOWN, true)
+    }
   }
 
   override fun onPause() {
@@ -544,12 +542,12 @@ class MainActivity : ComponentActivity() {
       val scheme = uri.scheme ?: return false
       if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return false
 
-      // Keep the original URL-based rule: the login host contains "shinigami",
-      // so it stays in the WebView along with the comic hosts.
-      val url = uri.toString()
-      return url.contains("accounts.google.com") ||
-        url.contains("shinigami") ||
-        url.contains("shngm")
+      // Keep the Google sign-in flow and every comic domain inside the WebView. The configured
+      // site URL can move to a new domain, so match the host family instead of a fixed list.
+      val host = uri.host ?: return false
+      return host.equals("accounts.google.com", ignoreCase = true) ||
+        host.contains("shinigami", ignoreCase = true) ||
+        host.contains("shngm", ignoreCase = true)
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {

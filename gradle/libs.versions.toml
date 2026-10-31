@@ -3,7 +3,7 @@ agp = "9.5.0"
 kotlin = "2.4.21"
 composeBom = "2026.09.00"
 coreKtx = "1.19.1"
-lifecycle = "2.10.0"
+lifecycle = "2.11.0"
 coroutines = "1.11.0"
 okhttp = "5.5.1"
 activityKtx = "1.13.0"
@@ -28,6 +28,5 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

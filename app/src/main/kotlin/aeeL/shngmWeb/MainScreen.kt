@@ -1,6 +1,5 @@
 package aeeL.shngmWeb
 
-import android.net.Uri
 import android.view.MotionEvent
 import android.webkit.CookieManager
 import android.webkit.WebView
@@ -38,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private const val TAG = "MainScreen"
@@ -258,8 +258,8 @@ private fun SplashOverlay(
 }
 
 private fun sameOrigin(first: String, second: String): Boolean {
-  val a = Uri.parse(first)
-  val b = Uri.parse(second)
+  val a = first.toUri()
+  val b = second.toUri()
   return a.scheme.equals(b.scheme, ignoreCase = true) &&
     a.host.equals(b.host, ignoreCase = true) &&
     a.port == b.port

@@ -5,9 +5,9 @@ Aplikasi Android berbasis **Kotlin** dan **Jetpack Compose** yang membungkus sit
 ## Informasi Aplikasi
 
 - **Package:** `aeeL.shngmWeb`
-- **Versi:** `1.7.0`
+- **Versi:** `1.8.0`
 - **Min SDK:** 24
-- **Target SDK:** 36
+- **Target SDK:** 37
 - **Compile SDK:** 37
 - **JDK:** 21
 
