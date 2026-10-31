@@ -175,6 +175,8 @@ class MainActivity : ComponentActivity() {
 
     interceptor.language = Locale.getDefault().toLanguageTag()
     interceptor.userAgent = webView.settings.userAgentString
+    ImageCache.language = interceptor.language
+    ImageCache.userAgent = interceptor.userAgent
   }
 
   fun detectImage() {
@@ -383,7 +385,8 @@ class MainActivity : ComponentActivity() {
     private val activityRef = WeakReference(activity)
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-      return activityRef.get()?.interceptor?.intercept(request)
+      val activity = activityRef.get() ?: return null
+      return activity.interceptor.intercept(request) ?: ImageCache.intercept(request)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

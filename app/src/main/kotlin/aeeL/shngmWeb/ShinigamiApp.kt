@@ -10,6 +10,7 @@ class ShinigamiApp : Application() {
   override fun onCreate() {
     super.onCreate()
     Logger.init(this)
+    ImageCache.init(this)
     DynamicColors.applyToActivitiesIfAvailable(this)
     setupCrashHandler()
   }

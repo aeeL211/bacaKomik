@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
-import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -67,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 
 private val ContextMenuAccent = Color.White
 
@@ -93,24 +91,8 @@ fun ContextMenuBottomSheet(
   LaunchedEffect(url) {
     previewState = PreviewState.LOADING
     val bitmap = withContext(Dispatchers.IO) {
-      try {
-        val cookie = CookieManager.getInstance().getCookie(url)
-        val requestBuilder = Request.Builder().url(url)
-        cookie?.let { requestBuilder.header("Cookie", it) }
-        val request = requestBuilder.build()
-
-        Http.client.newCall(request).execute().use { response ->
-          if (response.isSuccessful) {
-            response.body.byteStream().buffered().let {
-              BitmapFactory.decodeStream(it)
-            }
-          } else {
-            null
-          }
-        }
-      } catch (e: Exception) {
-        Logger.e("ContextMenuSheet", e) { "Image preview load failed" }
-        null
+      ImageCache.load(url)?.let { bytes ->
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
       }
     }
     previewBitmap = bitmap

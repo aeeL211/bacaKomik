@@ -18,6 +18,7 @@ Aplikasi Android berbasis **Kotlin** dan **Jetpack Compose Material 3** yang mem
   - mengambil HTML halaman utama lewat OkHttp, menyinkronkan cookie, dan membuka flag `is_premium`;
   - meneruskan request lain langsung ke WebView.
 - Konfigurasi URL remote realtime dari `url.txt` di GitHub, dengan fallback ke SharedPreferences / `BASE_URL`.
+- Cache gambar disk 256 MB lewat OkHttp: gambar yang sudah pernah dibuka tidak diunduh ulang saat reload, restart, atau membuka preview long-press.
 - Splash screen, progress bar, context menu gambar, unduh/bagikan/salin, dan logging debug.
 
 ## Build
@@ -63,6 +64,7 @@ app/src/main/kotlin/aeeL/shngmWeb/
 ├── Dialogs.kt                   # dialog JS Material 3
 ├── ErudaConsole.kt              # injeksi Eruda (opsional)
 ├── Http.kt                      # OkHttpClient bersama
+├── ImageCache.kt                # cache gambar disk + fallback offline
 ├── Logger.kt                    # log Android + file rotasi
 ├── MainActivity.kt              # activity, WebView, file chooser, popup, back
 ├── MainScreen.kt                # Compose UI, splash, WebView host
@@ -80,9 +82,10 @@ Aset JS untuk deteksi gambar ada di `app/src/main/assets/js/image_detector.js`.
 
 1. **Startup**: splash tampil, `MainViewModel` mengambil `url.txt` dari GitHub dengan cache-buster. Jika gagal, dipakai URL terakhir dari SharedPreferences atau `BASE_URL`.
 2. **Load halaman**: `MainScreen` membuat `PullToRefreshWebView`, lalu memuat URL ke WebView.
-3. **Interception**: `MainActivity.AppWebViewClient.shouldInterceptRequest` memanggil `RequestInterceptor`.
+3. **Interception**: `MainActivity.AppWebViewClient.shouldInterceptRequest` memanggil `RequestInterceptor`, lalu `ImageCache`.
    - Request iklan/GTM/Novu/pengumuman dijawab dengan respons sintetis.
    - Request HTML main-frame untuk host komik diambil lewat OkHttp, cookie disinkronkan, lalu `is_premium:false` diubah menjadi `true`.
+   - Request gambar GET dilayani dari cache disk OkHttp; jika belum ada, diunduh sekali lalu disimpan. Saat offline, versi cache dipakai.
    - Request lain dikembalikan `null` agar ditangani WebView.
 4. **Pull-to-refresh**: menarik dari posisi paling atas memicu `MainViewModel.refresh`, yang mengambil ulang `url.txt`. Jika origin berubah, WebView membuka URL baru; jika sama, halaman saat ini di-reload.
 5. **Long-press gambar**: koordinat sentuhan dikirim ke `image_detector.js`; URL gambar ditampilkan di bottom sheet.
@@ -102,6 +105,10 @@ https://raw.githubusercontent.com/aeeL211/bacaKomik/refs/heads/main/url.txt
 ```
 
 Setiap fetch menambahkan query cache-buster dan header `no-cache`, jadi perubahan `url.txt` langsung terbaca saat aplikasi dibuka, saat koneksi kembali, atau saat pull-to-refresh — tanpa perlu build APK baru.
+
+## Cache Gambar
+
+`ImageCache` memakai `okhttp3.Cache` di `cacheDir/image_cache` dengan batas 256 MB dan eviction LRU otomatis. Header `Cache-Control` dari CDN ditulis ulang menjadi `private, max-age=7 hari` khusus respons gambar, karena banyak CDN komik mengirim `no-store` yang membuat reload mengunduh ulang semua halaman. Permintaan gambar dari WebView dan preview long-press memakai cache yang sama; saat koneksi gagal, `FORCE_CACHE` dipakai sebagai fallback. Cache bertahan setelah aplikasi ditutup dan hanya dibersihkan sistem jika penyimpanan menipis.
 
 ## Catatan
 

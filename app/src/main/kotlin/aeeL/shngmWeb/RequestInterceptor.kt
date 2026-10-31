@@ -74,9 +74,7 @@ class RequestInterceptor {
     if (ALLOWED_HOSTS.none { host == it || host.endsWith(".$it") }) return false
 
     val accept = request.requestHeaders.header("Accept")
-    return accept == null ||
-      accept.contains("text/html", ignoreCase = true) ||
-      accept.contains("*/*")
+    return accept == null || accept.contains("text/html", ignoreCase = true)
   }
 
   private fun fetchAndPatch(request: WebResourceRequest): WebResourceResponse? {
