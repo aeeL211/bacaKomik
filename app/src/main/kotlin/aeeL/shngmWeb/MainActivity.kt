@@ -5,8 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Message
+import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.ValueCallback
@@ -31,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.util.Locale
@@ -50,10 +54,14 @@ class MainActivity : ComponentActivity() {
 
   var imageMenuUrl by mutableStateOf<String?>(null)
   var activeDialog by mutableStateOf<DialogType?>(null)
+  var avatarChoiceDialog by mutableStateOf<AvatarChoiceState?>(null)
+    private set
   var showWelcomeDialog by mutableStateOf(false)
     private set
 
   private var uploadCallback: ValueCallback<Array<Uri>>? = null
+  private var avatarUploadPending = false
+  private var avatarUploadCallback: ValueCallback<Array<Uri>>? = null
 
   private var lastBackPressedTime = 0L
   var touchX = 0
@@ -70,6 +78,17 @@ class MainActivity : ComponentActivity() {
         }
     } else {
       null
+    }
+
+    if (avatarUploadPending) {
+      avatarUploadPending = false
+      if (resultUris != null && resultUris.isNotEmpty()) {
+        avatarUploadCallback = callback
+        showAvatarChoice(resultUris[0])
+      } else {
+        callback.onReceiveValue(null)
+      }
+      return@registerForActivityResult
     }
 
     callback.onReceiveValue(resultUris)
@@ -108,6 +127,10 @@ class MainActivity : ComponentActivity() {
           onDismissDialog = { activeDialog = null },
           showWelcomeDialog = showWelcomeDialog,
           onDismissWelcome = { dismissWelcomeDialog() },
+          avatarChoice = avatarChoiceDialog,
+          onUseOriginalAvatar = { useOriginalAvatar() },
+          onCropAvatarNormally = { cropAvatarNormally() },
+          onDismissAvatarChoice = { dismissAvatarChoice() },
         )
       }
     }
@@ -246,6 +269,155 @@ class MainActivity : ComponentActivity() {
   fun clearUpload() {
     uploadCallback?.onReceiveValue(null)
     uploadCallback = null
+    avatarUploadPending = false
+  }
+
+  fun beginFileChooser(
+    webView: WebView,
+    callback: ValueCallback<Array<Uri>>,
+    params: WebChromeClient.FileChooserParams,
+  ) {
+    uploadCallback?.onReceiveValue(null)
+    uploadCallback = callback
+    avatarUploadPending = isAvatarUpload(webView, params)
+    launchFileChooser(params)
+  }
+
+  private fun isAvatarUpload(webView: WebView, params: WebChromeClient.FileChooserParams): Boolean {
+    val path = runCatching { Uri.parse(webView.url.orEmpty()).path.orEmpty() }.getOrDefault("")
+    if (!path.startsWith("/setting") && !path.startsWith("/settings")) return false
+
+    val accept = params.acceptTypes.joinToString(" ").lowercase(Locale.ROOT)
+    return accept.contains("image/")
+  }
+
+  private fun showAvatarChoice(uri: Uri) {
+    val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+    val name = queryDisplayName(uri) ?: "gambar"
+    avatarChoiceDialog = AvatarChoiceState(
+      uri = uri,
+      fileName = name,
+      mimeType = mime,
+    )
+  }
+
+  private fun queryDisplayName(uri: Uri): String? = runCatching {
+    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+      if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
+  }.getOrNull()
+
+  private fun useOriginalAvatar() {
+    val state = avatarChoiceDialog ?: return
+    if (state.isBusy) return
+
+    val pageUrl = mainWebView?.url ?: return
+    val tokens = readSessionTokens(pageUrl)
+    if (tokens.isEmpty()) {
+      avatarChoiceDialog = state.copy(error = "Sesi login tidak ditemukan. Login dulu di website.")
+      return
+    }
+
+    // Keep the WebView callback pending: if the upload fails, the user can still fall back to
+    // the website's own cropper with the same file.
+    avatarChoiceDialog = state.copy(isBusy = true, status = "Mengunggah gambar...", error = null)
+
+    lifecycleScope.launch {
+      AvatarUploader.uploadToCatbox(this@MainActivity, state.uri, state.fileName)
+        .onFailure { error ->
+          avatarChoiceDialog = avatarChoiceDialog?.copy(
+            isBusy = false,
+            status = null,
+            error = error.message ?: "Gagal mengunggah gambar.",
+          )
+        }
+        .onSuccess { url ->
+          avatarChoiceDialog = avatarChoiceDialog?.copy(status = "Menyimpan foto profil...")
+          AvatarUploader.setAvatar(tokens, url)
+            .onFailure { error ->
+              avatarChoiceDialog = avatarChoiceDialog?.copy(
+                isBusy = false,
+                status = null,
+                error = "${error.message ?: "Gagal menyimpan foto profil."}\nURL gambar: $url",
+              )
+            }
+            .onSuccess {
+              avatarChoiceDialog = null
+              avatarUploadCallback?.onReceiveValue(null)
+              avatarUploadCallback = null
+              updateSessionAvatar(pageUrl, url)
+              Toast.makeText(this@MainActivity, "Foto profil diperbarui.", Toast.LENGTH_SHORT).show()
+              mainWebView?.reload()
+            }
+        }
+    }
+  }
+
+  private fun cropAvatarNormally() {
+    val state = avatarChoiceDialog ?: return
+    if (state.isBusy) return
+
+    val callback = avatarUploadCallback
+    avatarUploadCallback = null
+    avatarChoiceDialog = null
+    callback?.onReceiveValue(arrayOf(state.uri))
+  }
+
+  private fun dismissAvatarChoice() {
+    val state = avatarChoiceDialog ?: return
+    if (state.isBusy) return
+
+    val callback = avatarUploadCallback
+    avatarUploadCallback = null
+    avatarChoiceDialog = null
+    callback?.onReceiveValue(null)
+  }
+
+  private fun readSessionTokens(url: String): List<String> {
+    val cookies = CookieManager.getInstance().getCookie(url) ?: return emptyList()
+
+    val tokens = mutableListOf<String>()
+    for (cookie in cookies.split(';')) {
+      val trimmed = cookie.trim()
+      val separator = trimmed.indexOf('=')
+      if (separator <= 0) continue
+      val name = trimmed.substring(0, separator)
+      if (name != "__session_v2" && name != "__session") continue
+
+      val raw = trimmed.substring(separator + 1)
+      val decoded = runCatching { Uri.decode(raw) }.getOrDefault(raw)
+      val json = runCatching { JSONObject(decoded) }.getOrNull() ?: continue
+      val token = json.optString("token").takeIf { it.isNotBlank() }
+        ?: json.optString("access_token").takeIf { it.isNotBlank() }
+      if (token != null && token !in tokens) tokens.add(token)
+    }
+    return tokens
+  }
+
+  /**
+   * The website stores the signed-in user in the __session cookie and rewrites that cookie after
+   * an avatar change. Mirror it here, otherwise the new avatar only appears after a re-login.
+   */
+  private fun updateSessionAvatar(url: String, imageUrl: String) {
+    val cookieManager = CookieManager.getInstance()
+    val cookies = cookieManager.getCookie(url) ?: return
+
+    for (cookie in cookies.split(';')) {
+      val trimmed = cookie.trim()
+      val separator = trimmed.indexOf('=')
+      if (separator <= 0) continue
+      val name = trimmed.substring(0, separator)
+      if (name != "__session" && name != "__session_v2") continue
+
+      val raw = trimmed.substring(separator + 1)
+      val decoded = runCatching { Uri.decode(raw) }.getOrDefault(raw)
+      val json = runCatching { JSONObject(decoded) }.getOrNull() ?: continue
+      json.put("avatar_image_url", imageUrl)
+
+      val encoded = Uri.encode(json.toString())
+      cookieManager.setCookie(url, "$name=$encoded; Path=/; Max-Age=31536000")
+    }
+    cookieManager.flush()
   }
 
   fun openPopup(url: String) {
@@ -320,8 +492,11 @@ class MainActivity : ComponentActivity() {
 
   override fun onDestroy() {
     clearUpload()
+    avatarUploadCallback?.onReceiveValue(null)
+    avatarUploadCallback = null
     runCatching { activeDialog?.result?.cancel() }
     activeDialog = null
+    avatarChoiceDialog = null
 
     mainWebView?.let { webView ->
       webView.stopLoading()
@@ -448,9 +623,7 @@ class MainActivity : ComponentActivity() {
     override fun onShowFileChooser(webView: WebView, filePathCallback: ValueCallback<Array<Uri>>, fileChooserParams: FileChooserParams): Boolean {
       val activity = activityRef.get() ?: return false
 
-      activity.uploadCallback?.onReceiveValue(null)
-      activity.uploadCallback = filePathCallback
-      activity.launchFileChooser(fileChooserParams)
+      activity.beginFileChooser(webView, filePathCallback, fileChooserParams)
       return true
     }
 

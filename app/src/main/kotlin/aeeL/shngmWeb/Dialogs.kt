@@ -64,7 +64,7 @@ sealed interface DialogType {
 
 /** Keeps the status bar hidden while a dialog window is visible. */
 @Composable
-private fun HideStatusBarInDialog() {
+internal fun HideStatusBarInDialog() {
   val view = LocalView.current
   DisposableEffect(view) {
     val window = (view.parent as? DialogWindowProvider)?.window

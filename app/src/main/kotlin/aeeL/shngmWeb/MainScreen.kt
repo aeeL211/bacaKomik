@@ -61,6 +61,10 @@ fun MainScreen(
   onDismissDialog: () -> Unit,
   showWelcomeDialog: Boolean,
   onDismissWelcome: () -> Unit,
+  avatarChoice: AvatarChoiceState?,
+  onUseOriginalAvatar: () -> Unit,
+  onCropAvatarNormally: () -> Unit,
+  onDismissAvatarChoice: () -> Unit,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val context = LocalContext.current
@@ -171,6 +175,15 @@ fun MainScreen(
       AppDialog(
         dialogType = dialog,
         onDismiss = onDismissDialog,
+      )
+    }
+
+    avatarChoice?.let { choice ->
+      AvatarChoiceDialog(
+        state = choice,
+        onUseOriginal = onUseOriginalAvatar,
+        onCropNormally = onCropAvatarNormally,
+        onDismiss = onDismissAvatarChoice,
       )
     }
 
