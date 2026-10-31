@@ -91,9 +91,7 @@ fun ContextMenuBottomSheet(
   LaunchedEffect(url) {
     previewState = PreviewState.LOADING
     val bitmap = withContext(Dispatchers.IO) {
-      ImageCache.load(url)?.let { bytes ->
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-      }
+      ImageCache.openStream(url)?.use { BitmapFactory.decodeStream(it) }
     }
     previewBitmap = bitmap
     previewState = if (bitmap != null) PreviewState.SUCCESS else PreviewState.ERROR

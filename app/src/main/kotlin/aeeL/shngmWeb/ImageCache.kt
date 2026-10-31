@@ -9,8 +9,10 @@ import okhttp3.CacheControl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.Locale
 
 /**
@@ -32,6 +34,9 @@ object ImageCache {
   @Volatile var language: String = Locale.getDefault().toLanguageTag()
 
   @Volatile var userAgent: String? = null
+
+  /** Hint from NetworkMonitor, so offline images go straight to the disk cache. */
+  @Volatile var isOnline: Boolean = true
 
   @Volatile private var initialized = false
   private lateinit var imageClient: OkHttpClient
@@ -71,6 +76,9 @@ object ImageCache {
     if (!request.method.equals("GET", ignoreCase = true)) return false
     if (request.requestHeaders.keys.any { it.equals("Range", ignoreCase = true) }) return false
 
+    val host = url.host?.lowercase(Locale.ROOT) ?: return false
+    if (NON_CACHEABLE_HOSTS.any { host == it || host.endsWith(".$it") }) return false
+
     val path = url.path.orEmpty().lowercase(Locale.ROOT)
     val looksLikeImage = IMAGE_EXTENSIONS.any { path.endsWith(it) }
 
@@ -108,21 +116,7 @@ object ImageCache {
       if (name.lowercase(Locale.ROOT) !in SKIPPED_HEADERS) builder.header(name, value)
     }
 
-    val response = try {
-      client.newCall(builder.build()).execute()
-    } catch (e: IOException) {
-      Logger.w(TAG) { "Image request failed, using cache for $url: ${e.message}" }
-      try {
-        client.newCall(
-          builder.build().newBuilder()
-            .cacheControl(CacheControl.FORCE_CACHE)
-            .build(),
-        ).execute()
-      } catch (e: IOException) {
-        Logger.w(TAG) { "No cached image for $url: ${e.message}" }
-        return null
-      }
-    }
+    val response = fetch(url, builder) ?: return null
 
     try {
       val contentType = response.header("Content-Type").orEmpty()
@@ -161,13 +155,42 @@ object ImageCache {
     }
   }
 
-  /** Reads an image through the same cache; used by the long-press preview. */
-  fun load(url: String): ByteArray? = try {
-    client.newCall(requestBuilder(url).build()).execute().use { response ->
-      if (response.isSuccessful) response.body.bytes() else null
+  /** Opens the image through the same cache; used by the long-press preview. */
+  fun openStream(url: String): InputStream? = try {
+    val builder = requestBuilder(url)
+    val response = fetch(url, builder)
+    if (response == null) {
+      null
+    } else if (response.isSuccessful) {
+      response.body.byteStream()
+    } else {
+      response.close()
+      null
     }
   } catch (e: Exception) {
     Logger.w(TAG) { "Preview load failed for $url: ${e.message}" }
+    null
+  }
+
+  private fun fetch(url: String, builder: Request.Builder): Response? {
+    if (!isOnline) return fromCache(builder)
+
+    return try {
+      client.newCall(builder.build()).execute()
+    } catch (e: IOException) {
+      Logger.w(TAG) { "Image request failed, using cache for $url: ${e.message}" }
+      fromCache(builder)
+    }
+  }
+
+  private fun fromCache(builder: Request.Builder): Response? = try {
+    client.newCall(
+      builder.build().newBuilder()
+        .cacheControl(CacheControl.FORCE_CACHE)
+        .build(),
+    ).execute()
+  } catch (e: IOException) {
+    Logger.w(TAG) { "No cached image: ${e.message}" }
     null
   }
 
@@ -211,6 +234,9 @@ object ImageCache {
     ".bmp",
     ".svg",
   )
+
+  /** Challenge/widget hosts whose images can change at any time. */
+  private val NON_CACHEABLE_HOSTS = setOf("challenges.cloudflare.com")
 
   private val SKIPPED_HEADERS = setOf(
     "host",

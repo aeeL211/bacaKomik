@@ -40,6 +40,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private var configJob: Job? = null
 
   init {
+    ImageCache.isOnline = isOnline
     loadConfig()
     observeNetwork()
     startSplashTimer(SPLASH_HANG_MS)
@@ -58,6 +59,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
       networkMonitor.networkStatus.collect { isConnected ->
         val wasOnline = isOnline
         isOnline = isConnected
+        ImageCache.isOnline = isConnected
 
         if (isConnected) {
           if (!wasOnline) {
@@ -74,6 +76,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun onProgress(progress: Int) {
+    val state = _uiState.value
+    if (!state.isSplashVisible || state.loadingProgress == progress) return
     _uiState.update { it.copy(loadingProgress = progress) }
   }
 

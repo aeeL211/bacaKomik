@@ -1,7 +1,7 @@
 package aeeL.shngmWeb
 
 object AppConfig {
-  const val DEBUG = true
+  val DEBUG = BuildConfig.DEBUG
   const val ENABLE_ERUDA = false
 
   const val MAX_LOG_FILE_SIZE = 5 * 1024 * 1024L

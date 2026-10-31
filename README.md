@@ -110,7 +110,15 @@ Setiap fetch menambahkan query cache-buster dan header `no-cache`, jadi perubaha
 
 `ImageCache` memakai `okhttp3.Cache` di `cacheDir/image_cache` dengan batas 256 MB dan eviction LRU otomatis. Header `Cache-Control` dari CDN ditulis ulang menjadi `private, max-age=7 hari` khusus respons gambar, karena banyak CDN komik mengirim `no-store` yang membuat reload mengunduh ulang semua halaman. Permintaan gambar dari WebView dan preview long-press memakai cache yang sama; saat koneksi gagal, `FORCE_CACHE` dipakai sebagai fallback. Cache bertahan setelah aplikasi ditutup dan hanya dibersihkan sistem jika penyimpanan menipis.
 
+## Efisiensi
+
+- **Gambar:** cache disk 256 MB dengan TTL 7 hari; reload, restart, dan preview memakai cache yang sama. Saat offline, cache dipakai langsung tanpa menunggu timeout jaringan.
+- **Logging:** mengikuti `BuildConfig.DEBUG`, jadi build release tidak menulis file log atau memformat pesan debug.
+- **Progress:** update progress hanya diteruskan selama splash masih tampil, sehingga tidak memicu recomposition setelah halaman terbuka.
+- **Preview:** membaca stream dari cache, bukan menyalin seluruh byte gambar ke memori lebih dulu.
+- **Tradeoff:** HTML halaman dan data API tetap diambil dari jaringan agar konten terbaru; aksi "Unduh" memakai `DownloadManager` dan mengunduh ulang dari jaringan.
+
 ## Catatan
 
-- `AppConfig.DEBUG` mengaktifkan log ke Logcat dan file di `Android/data/aeeL.shngmWeb/files/log/`.
+- `AppConfig.DEBUG` mengikuti `BuildConfig.DEBUG`; log ke Logcat dan file di `Android/data/aeeL.shngmWeb/files/log/` hanya aktif di build debug.
 - `AppConfig.ENABLE_ERUDA` bisa diaktifkan untuk debugging WebView.
