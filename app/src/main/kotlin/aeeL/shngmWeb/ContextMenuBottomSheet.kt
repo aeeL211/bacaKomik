@@ -43,6 +43,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -62,16 +63,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-private val ContextMenuAccent = Primary300
 private const val PREVIEW_MAX_PX = 1280
 
 private val DOWNLOAD_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp")
@@ -93,6 +93,7 @@ fun ContextMenuBottomSheet(
 ) {
   val context = LocalContext.current
   val haptic = LocalHapticFeedback.current
+  val colors = MaterialTheme.colorScheme
   var preview by remember(url) { mutableStateOf<PreviewState>(PreviewState.Loading) }
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -105,7 +106,7 @@ fun ContextMenuBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismissRequest,
     sheetState = sheetState,
-    containerColor = BaseBg,
+    containerColor = colors.surfaceContainerLow,
     shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     dragHandle = {
       Box(
@@ -114,7 +115,7 @@ fun ContextMenuBottomSheet(
           .width(36.dp)
           .height(4.dp)
           .clip(RoundedCornerShape(2.dp))
-          .background(General500),
+          .background(colors.outline),
       )
     },
   ) {
@@ -129,13 +130,13 @@ fun ContextMenuBottomSheet(
     ) {
       Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BaseCard),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerHigh),
         modifier = Modifier
           .fillMaxWidth()
           .aspectRatio(16f / 9f)
           .heightIn(max = 220.dp)
-          .border(1.dp, General800, RoundedCornerShape(16.dp))
-          .clickable {
+          .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+          .clickable(role = Role.Button) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onOpenInPopup(url)
             onDismissRequest()
@@ -160,12 +161,12 @@ fun ContextMenuBottomSheet(
               Box(
                 modifier = Modifier
                   .fillMaxSize()
-                  .background(BaseCard.copy(alpha = alpha)),
+                  .background(colors.surfaceContainerHighest.copy(alpha = alpha)),
                 contentAlignment = Alignment.Center,
               ) {
                 CircularProgressIndicator(
                   modifier = Modifier.size(32.dp),
-                  color = ContextMenuAccent,
+                  color = colors.primary,
                   strokeWidth = 3.dp,
                 )
               }
@@ -189,14 +190,14 @@ fun ContextMenuBottomSheet(
                 Icon(
                   painter = painterResource(id = R.drawable.ic_photo_m3),
                   contentDescription = null,
-                  tint = General400,
+                  tint = colors.onSurfaceVariant,
                   modifier = Modifier.size(40.dp),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                   text = "Gagal memuat pratinjau gambar",
-                  color = General400,
-                  fontSize = 12.sp,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = colors.onSurfaceVariant,
                   textAlign = TextAlign.Center,
                 )
               }
@@ -211,14 +212,14 @@ fun ContextMenuBottomSheet(
         modifier = Modifier
           .fillMaxWidth()
           .clip(RoundedCornerShape(8.dp))
-          .background(BaseDark)
-          .border(1.dp, General700, RoundedCornerShape(8.dp))
+          .background(colors.surfaceContainerLowest)
+          .border(1.dp, colors.outlineVariant, RoundedCornerShape(8.dp))
           .padding(horizontal = 12.dp, vertical = 8.dp),
       ) {
         Text(
           text = url,
-          color = General300,
-          fontSize = 12.sp,
+          style = MaterialTheme.typography.bodySmall,
+          color = colors.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -311,13 +312,14 @@ private fun ActionTile(
   modifier: Modifier = Modifier,
   onClick: () -> Unit,
 ) {
+  val colors = MaterialTheme.colorScheme
   Box(
     modifier = modifier
       .heightIn(min = 68.dp)
       .clip(RoundedCornerShape(12.dp))
-      .background(BaseCard)
-      .border(1.dp, General800, RoundedCornerShape(12.dp))
-      .clickable(onClick = onClick)
+      .background(colors.surfaceContainerHigh)
+      .border(1.dp, colors.outlineVariant, RoundedCornerShape(12.dp))
+      .clickable(role = Role.Button, onClick = onClick)
       .padding(vertical = 12.dp, horizontal = 8.dp),
     contentAlignment = Alignment.Center,
   ) {
@@ -328,14 +330,14 @@ private fun ActionTile(
       Icon(
         painter = painterResource(id = iconRes),
         contentDescription = null,
-        tint = ContextMenuAccent,
+        tint = colors.primary,
         modifier = Modifier.size(24.dp),
       )
       Spacer(modifier = Modifier.height(6.dp))
       Text(
         text = label,
-        color = General100,
-        fontSize = 12.sp,
+        style = MaterialTheme.typography.labelMedium,
+        color = colors.onSurface,
         textAlign = TextAlign.Center,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -350,26 +352,27 @@ private fun ActionRow(
   title: String,
   onClick: () -> Unit,
 ) {
+  val colors = MaterialTheme.colorScheme
   Row(
     modifier = Modifier
       .fillMaxWidth()
       .heightIn(min = 48.dp)
       .clip(RoundedCornerShape(12.dp))
-      .clickable(onClick = onClick)
+      .clickable(role = Role.Button, onClick = onClick)
       .padding(vertical = 12.dp, horizontal = 12.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(
       painter = painterResource(id = iconRes),
       contentDescription = null,
-      tint = ContextMenuAccent,
+      tint = colors.primary,
       modifier = Modifier.size(22.dp),
     )
     Spacer(modifier = Modifier.width(16.dp))
     Text(
       text = title,
-      color = General100,
-      fontSize = 14.sp,
+      style = MaterialTheme.typography.bodyMedium,
+      color = colors.onSurface,
     )
   }
 }

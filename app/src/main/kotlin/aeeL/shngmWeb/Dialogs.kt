@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -39,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -84,6 +84,7 @@ fun AppDialog(
   val prompt = dialogType as? DialogType.Prompt
   var input by remember(dialogType) { mutableStateOf(prompt?.defaultValue.orEmpty()) }
   val focusRequester = remember { FocusRequester() }
+  val colors = MaterialTheme.colorScheme
 
   if (prompt != null) {
     LaunchedEffect(dialogType) { focusRequester.requestFocus() }
@@ -115,7 +116,7 @@ fun AppDialog(
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .background(AppScrim)
+        .background(colors.scrim.copy(alpha = 0.62f))
         .padding(24.dp),
       contentAlignment = Alignment.Center,
     ) {
@@ -124,27 +125,26 @@ fun AppDialog(
           .fillMaxWidth()
           .wrapContentHeight(),
         shape = RoundedCornerShape(28.dp),
-        color = BaseCard,
+        color = colors.surfaceContainerHigh,
         tonalElevation = 0.dp,
         shadowElevation = 16.dp,
-        border = BorderStroke(1.dp, General700),
+        border = BorderStroke(1.dp, colors.outlineVariant),
       ) {
         Column(
           modifier = Modifier.padding(24.dp),
         ) {
           Text(
             text = title,
-            color = General100,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.onSurface,
           )
           Spacer(modifier = Modifier.height(16.dp))
           // Alert and confirm always show the message row; prompt hides an empty one.
           if (dialogType.message.isNotEmpty() || prompt == null) {
             Text(
               text = dialogType.message,
-              color = General300,
-              fontSize = 14.sp,
+              style = MaterialTheme.typography.bodyMedium,
+              color = colors.onSurfaceVariant,
             )
             if (prompt != null) Spacer(modifier = Modifier.height(12.dp))
           }
@@ -156,13 +156,13 @@ fun AppDialog(
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
               colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Primary400,
-                unfocusedBorderColor = General700,
-                focusedTextColor = General100,
-                unfocusedTextColor = General100,
-                cursorColor = Primary300,
-                focusedContainerColor = BaseDark,
-                unfocusedContainerColor = BaseDark,
+                focusedBorderColor = colors.primary,
+                unfocusedBorderColor = colors.outline,
+                focusedTextColor = colors.onSurface,
+                unfocusedTextColor = colors.onSurface,
+                cursorColor = colors.primary,
+                focusedContainerColor = colors.surfaceContainerLowest,
+                unfocusedContainerColor = colors.surfaceContainerLowest,
               ),
               singleLine = true,
               keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -176,11 +176,19 @@ fun AppDialog(
           ) {
             if (dialogType !is DialogType.Alert) {
               TextButton(onClick = onCancel) {
-                Text(text = "Batal", color = General400)
+                Text(
+                  text = "Batal",
+                  style = MaterialTheme.typography.labelLarge,
+                  color = colors.onSurfaceVariant,
+                )
               }
             }
             TextButton(onClick = onConfirm) {
-              Text(text = "OK", color = Primary300)
+              Text(
+                text = "OK",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.primary,
+              )
             }
           }
         }
@@ -192,16 +200,19 @@ fun AppDialog(
 /** One-time onboarding hint for the premium unlock flow. */
 @Composable
 fun WelcomeDialog(onDismiss: () -> Unit) {
+  val colors = MaterialTheme.colorScheme
   AlertDialog(
     onDismissRequest = onDismiss,
-    containerColor = BaseCard,
-    titleContentColor = General100,
-    textContentColor = General300,
+    shape = RoundedCornerShape(28.dp),
+    containerColor = colors.surfaceContainerHigh,
+    titleContentColor = colors.onSurface,
+    textContentColor = colors.onSurfaceVariant,
     title = {
       Text(
         text = "Fitur Premium",
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
     },
@@ -211,6 +222,7 @@ fun WelcomeDialog(onDismiss: () -> Unit) {
         text = "Login dengan akun Google untuk membuka fitur premium secara gratis.",
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodyMedium,
       )
     },
     confirmButton = {
@@ -219,7 +231,11 @@ fun WelcomeDialog(onDismiss: () -> Unit) {
         contentAlignment = Alignment.Center,
       ) {
         TextButton(onClick = onDismiss) {
-          Text(text = "Mengerti", color = Primary300)
+          Text(
+            text = "Mengerti",
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.primary,
+          )
         }
       }
     },

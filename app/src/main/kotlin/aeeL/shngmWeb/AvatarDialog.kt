@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,6 +89,7 @@ fun AvatarChoiceDialog(
   onDismiss: () -> Unit,
 ) {
   val context = LocalContext.current
+  val colors = MaterialTheme.colorScheme
   val animated = supportsAnimation(state.mimeType)
   val previewAnimates = animated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
   val format = formatLabel(state.mimeType, state.fileName)
@@ -106,7 +108,7 @@ fun AvatarChoiceDialog(
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .background(AppScrim)
+        .background(colors.scrim.copy(alpha = 0.62f))
         .padding(24.dp),
       contentAlignment = Alignment.Center,
     ) {
@@ -116,10 +118,10 @@ fun AvatarChoiceDialog(
           .fillMaxWidth()
           .wrapContentHeight(),
         shape = RoundedCornerShape(28.dp),
-        color = BaseCard,
+        color = colors.surfaceContainerHigh,
         tonalElevation = 0.dp,
         shadowElevation = 16.dp,
-        border = BorderStroke(1.dp, General700),
+        border = BorderStroke(1.dp, colors.outlineVariant),
       ) {
         Column(
           modifier = Modifier
@@ -131,13 +133,13 @@ fun AvatarChoiceDialog(
               modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(Primary500.copy(alpha = 0.16f)),
+                .background(colors.primary.copy(alpha = 0.16f)),
               contentAlignment = Alignment.Center,
             ) {
               Icon(
                 painter = painterResource(id = R.drawable.ic_photo_m3),
                 contentDescription = null,
-                tint = Primary300,
+                tint = colors.primary,
                 modifier = Modifier.size(22.dp),
               )
             }
@@ -145,9 +147,8 @@ fun AvatarChoiceDialog(
             Column(modifier = Modifier.weight(1f)) {
               Text(
                 text = if (animated) "Avatar GIF/WebP" else "Foto Profil",
-                color = General100,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onSurface,
               )
               Spacer(modifier = Modifier.height(2.dp))
               Text(
@@ -156,8 +157,8 @@ fun AvatarChoiceDialog(
                   animated -> "Animasi tidak diubah"
                   else -> "Pratinjau sebelum dipasang"
                 },
-                color = General400,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
               )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -176,8 +177,8 @@ fun AvatarChoiceDialog(
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
               text = state.fileName,
-              color = General300,
-              fontSize = 12.sp,
+              style = MaterialTheme.typography.bodySmall,
+              color = colors.onSurfaceVariant,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
               modifier = Modifier.weight(1f),
@@ -186,8 +187,8 @@ fun AvatarChoiceDialog(
               Spacer(modifier = Modifier.width(8.dp))
               Text(
                 text = fileSize,
-                color = General400,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant.copy(alpha = 0.8f),
               )
             }
           }
@@ -199,14 +200,14 @@ fun AvatarChoiceDialog(
                 CircularProgressIndicator(
                   modifier = Modifier.size(16.dp),
                   strokeWidth = 2.dp,
-                  color = Primary300,
+                  color = colors.primary,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
               }
               Text(
                 text = state.status ?: "Memproses...",
-                color = General300,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
               )
             }
           }
@@ -218,15 +219,14 @@ fun AvatarChoiceDialog(
               modifier = Modifier
                 .fillMaxWidth()
                 .clip(errorShape)
-                .background(Danger500.copy(alpha = 0.12f))
-                .border(1.dp, Danger500.copy(alpha = 0.4f), errorShape)
+                .background(colors.errorContainer)
+                .border(1.dp, colors.error.copy(alpha = 0.4f), errorShape)
                 .padding(12.dp),
             ) {
               Text(
                 text = state.error,
-                color = Danger500,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onErrorContainer,
               )
             }
           }
@@ -270,7 +270,12 @@ fun AvatarChoiceDialog(
             ) {
               Text(
                 text = "Batal",
-                color = if (state.isBusy) General500 else General400,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (state.isBusy) {
+                  colors.onSurfaceVariant.copy(alpha = 0.5f)
+                } else {
+                  colors.onSurfaceVariant
+                },
               )
             }
           }
@@ -282,18 +287,19 @@ fun AvatarChoiceDialog(
 
 @Composable
 private fun FormatBadge(label: String) {
+  val colors = MaterialTheme.colorScheme
   val shape = RoundedCornerShape(999.dp)
   Box(
     modifier = Modifier
       .clip(shape)
-      .background(BaseDark)
-      .border(1.dp, General700, shape)
+      .background(colors.surfaceContainerLowest)
+      .border(1.dp, colors.outlineVariant, shape)
       .padding(horizontal = 10.dp, vertical = 5.dp),
   ) {
     Text(
       text = label,
-      color = Primary200,
-      fontSize = 10.sp,
+      style = MaterialTheme.typography.labelSmall,
+      color = colors.primary,
       fontWeight = FontWeight.Bold,
       letterSpacing = 0.8.sp,
     )
@@ -305,14 +311,15 @@ private fun AvatarPreviewCard(
   uri: Uri,
   isBusy: Boolean,
 ) {
+  val colors = MaterialTheme.colorScheme
   val shape = RoundedCornerShape(18.dp)
   Box(
     modifier = Modifier
       .fillMaxWidth()
       .height(180.dp)
       .clip(shape)
-      .background(BaseDark)
-      .border(1.dp, General700, shape),
+      .background(colors.surfaceContainerLowest)
+      .border(1.dp, colors.outlineVariant, shape),
     contentAlignment = Alignment.Center,
   ) {
     AvatarPreview(
@@ -324,13 +331,13 @@ private fun AvatarPreviewCard(
       Box(
         modifier = Modifier
           .fillMaxSize()
-          .background(BaseDark.copy(alpha = 0.72f)),
+          .background(colors.surfaceContainerLowest.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
       ) {
         CircularProgressIndicator(
           modifier = Modifier.size(30.dp),
           strokeWidth = 2.5.dp,
-          color = Primary300,
+          color = colors.primary,
         )
       }
     }
@@ -343,6 +350,7 @@ private fun AvatarPreview(
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
+  val colors = MaterialTheme.colorScheme
   var drawable by remember(uri) { mutableStateOf<Drawable?>(null) }
   var isLoading by remember(uri) { mutableStateOf(true) }
 
@@ -382,7 +390,7 @@ private fun AvatarPreview(
         CircularProgressIndicator(
           modifier = Modifier.size(28.dp),
           strokeWidth = 2.5.dp,
-          color = Primary300,
+          color = colors.primary,
         )
       }
 
@@ -391,14 +399,14 @@ private fun AvatarPreview(
           Icon(
             painter = painterResource(id = R.drawable.ic_photo_m3),
             contentDescription = null,
-            tint = General400,
+            tint = colors.onSurfaceVariant,
             modifier = Modifier.size(36.dp),
           )
           Spacer(modifier = Modifier.height(8.dp))
           Text(
             text = "Pratinjau tidak tersedia",
-            color = General400,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
           )
         }
       }
@@ -415,11 +423,12 @@ private fun AvatarOption(
   enabled: Boolean,
   onClick: () -> Unit,
 ) {
+  val colors = MaterialTheme.colorScheme
   val shape = RoundedCornerShape(16.dp)
-  val background = if (highlighted) Primary500.copy(alpha = 0.10f) else BaseDark
-  val borderColor = if (highlighted) Primary400.copy(alpha = 0.55f) else General700
-  val iconBackground = if (highlighted) Primary500.copy(alpha = 0.18f) else General800
-  val iconTint = if (highlighted) Primary300 else General300
+  val background = if (highlighted) colors.primaryContainer.copy(alpha = 0.55f) else colors.surfaceContainerLowest
+  val borderColor = if (highlighted) colors.primary.copy(alpha = 0.45f) else colors.outlineVariant
+  val iconBackground = if (highlighted) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainerHigh
+  val iconTint = if (highlighted) colors.primary else colors.onSurfaceVariant
 
   Row(
     modifier = Modifier
@@ -455,9 +464,8 @@ private fun AvatarOption(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = title,
-          color = General100,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.SemiBold,
+          style = MaterialTheme.typography.titleMedium,
+          color = colors.onSurface,
           modifier = Modifier.weight(1f, fill = false),
         )
         if (highlighted) {
@@ -468,9 +476,8 @@ private fun AvatarOption(
       Spacer(modifier = Modifier.height(3.dp))
       Text(
         text = description,
-        color = General400,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceVariant,
       )
     }
   }
@@ -478,16 +485,17 @@ private fun AvatarOption(
 
 @Composable
 private fun RecommendedBadge() {
+  val colors = MaterialTheme.colorScheme
   Box(
     modifier = Modifier
       .clip(RoundedCornerShape(999.dp))
-      .background(Primary500.copy(alpha = 0.20f))
+      .background(colors.primary.copy(alpha = 0.14f))
       .padding(horizontal = 7.dp, vertical = 2.dp),
   ) {
     Text(
       text = "Disarankan",
-      color = Primary200,
-      fontSize = 10.sp,
+      style = MaterialTheme.typography.labelSmall,
+      color = colors.primary,
       fontWeight = FontWeight.Medium,
     )
   }

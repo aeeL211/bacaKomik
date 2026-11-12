@@ -5,7 +5,9 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -18,10 +20,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -40,12 +45,6 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private const val TAG = "MainScreen"
-
-private val DarkBackground = BaseDark
-private val SplashGradientTop = BaseBg
-private val SplashGradientBottom = BaseDark
-private val SplashProgress = Primary500
-private val SplashProgressTrack = Primary500.copy(alpha = 0.22f)
 
 @Composable
 fun MainScreen(
@@ -67,6 +66,7 @@ fun MainScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val context = LocalContext.current
+  val colorScheme = MaterialTheme.colorScheme
 
   // Full screen under the status bar and camera cutout (top is not padded).
   // Bottom (nav bar / keyboard) and sides (3-button nav in landscape) are padded.
@@ -117,11 +117,20 @@ fun MainScreen(
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(DarkBackground),
+      .background(colorScheme.background),
   ) {
     AndroidView(
       factory = { host },
-      update = { it.isRefreshing = uiState.isRefreshing },
+      update = { hostView ->
+        hostView.isRefreshing = uiState.isRefreshing
+        hostView.applyTheme(
+          background = colorScheme.background.toArgb(),
+          progressBackground = colorScheme.surfaceContainerHigh.toArgb(),
+          accent = colorScheme.primary.toArgb(),
+        )
+        // Recomposition can happen after a back/forward or a URL change; keep native zoom in sync.
+        WebViewZoom.apply(hostView.webView, hostView.webView.url)
+      },
       modifier = Modifier
         .fillMaxSize()
         .windowInsetsPadding(webViewInsets),
@@ -132,6 +141,7 @@ fun MainScreen(
       val webView = host.webView
 
       try {
+        WebViewZoom.apply(webView, command.url)
         val currentUrl = webView.url
         when {
           command.reloadIfSameOrigin && currentUrl != null && sameOrigin(currentUrl, command.url) ->
@@ -156,7 +166,8 @@ fun MainScreen(
         Box(
           modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            // The image viewer stays dark to avoid flashes around full-screen artwork.
+            .background(BaseDark),
         ) {
           AndroidView(
             factory = { popup },
@@ -208,25 +219,38 @@ private fun SplashOverlay(
   visible: Boolean,
   progress: Int,
 ) {
+  val colors = MaterialTheme.colorScheme
+
   AnimatedVisibility(
     visible = visible,
-    exit = fadeOut(animationSpec = tween(durationMillis = 500)),
+    enter = fadeIn(animationSpec = tween(280)) + scaleIn(
+      animationSpec = tween(280),
+      initialScale = 0.98f,
+    ),
+    exit = fadeOut(animationSpec = tween(450)),
   ) {
     Box(
       modifier = Modifier
         .fillMaxSize()
         .background(
           brush = Brush.verticalGradient(
-            colors = listOf(SplashGradientTop, SplashGradientBottom),
+            colors = listOf(colors.surfaceContainerLow, colors.background),
           ),
         ),
       contentAlignment = Alignment.Center,
     ) {
+      val progressModifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 32.dp)
+        .align(Alignment.BottomCenter)
+        .windowInsetsPadding(WindowInsets.navigationBars)
+        .height(4.dp)
+
       Image(
         painter = painterResource(id = R.drawable.logo),
         contentDescription = null,
         modifier = Modifier
-          .fillMaxWidth(0.65f)
+          .fillMaxWidth(0.62f)
           .aspectRatio(1f),
         contentScale = ContentScale.Fit,
       )
@@ -234,25 +258,17 @@ private fun SplashOverlay(
       if (progress > 0) {
         LinearProgressIndicator(
           progress = { progress / 100f },
-          modifier = Modifier
-            .fillMaxWidth()
-            .align(Alignment.BottomCenter)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .height(3.dp),
-          color = SplashProgress,
-          trackColor = SplashProgressTrack,
-          strokeCap = StrokeCap.Butt,
+          modifier = progressModifier,
+          color = colors.primary,
+          trackColor = colors.primary.copy(alpha = 0.18f),
+          strokeCap = StrokeCap.Round,
         )
       } else {
         LinearProgressIndicator(
-          modifier = Modifier
-            .fillMaxWidth()
-            .align(Alignment.BottomCenter)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .height(3.dp),
-          color = SplashProgress,
-          trackColor = SplashProgressTrack,
-          strokeCap = StrokeCap.Butt,
+          modifier = progressModifier,
+          color = colors.primary,
+          trackColor = colors.primary.copy(alpha = 0.18f),
+          strokeCap = StrokeCap.Round,
         )
       }
     }

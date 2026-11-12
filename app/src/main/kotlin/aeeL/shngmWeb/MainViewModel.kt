@@ -44,7 +44,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   )
 
   private var isOnline = networkMonitor.isConnected()
-  private var isPageLoaded = false
   private var splashJob: Job? = null
   private var refreshTimeoutJob: Job? = null
   private var configJob: Job? = null
@@ -52,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   init {
     ImageCache.isOnline = isOnline
+    SiteHosts.updateFromUrl(configRepository.cachedUrl())
     loadConfig(emitCommand = true, reloadIfSameOrigin = false)
     observeNetwork()
     startSplashTimer(SPLASH_HANG_MS)
@@ -62,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     configJob = viewModelScope.launch {
       val url = configRepository.fetchUrl()
+      SiteHosts.updateFromUrl(url)
       val command = if (emitCommand) {
         PageCommand(nextCommandId++, url, reloadIfSameOrigin)
       } else {
@@ -88,7 +89,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
           if (isConnected) {
             if (!wasOnline) {
-              loadConfig(emitCommand = !isPageLoaded, reloadIfSameOrigin = true)
+              // Always issue a command: a page that failed while offline must be retried, and a
+              // page that was already loaded should reload now that the network is back.
+              loadConfig(emitCommand = true, reloadIfSameOrigin = true)
             }
           } else {
             _uiState.update { it.copy(isRefreshing = false) }
@@ -104,22 +107,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun onPageStarted() {
-    isPageLoaded = false
     if (_uiState.value.isSplashVisible) {
       _uiState.update { it.copy(loadingProgress = 0) }
     }
   }
 
   fun onPageFinished() {
-    finishPageLoad(loaded = true)
+    finishPageLoad()
   }
 
   fun onPageLoadFailed() {
-    finishPageLoad(loaded = false)
+    finishPageLoad()
   }
 
-  private fun finishPageLoad(loaded: Boolean) {
-    isPageLoaded = loaded
+  private fun finishPageLoad() {
     refreshTimeoutJob?.cancel()
     refreshTimeoutJob = null
     _uiState.update { it.copy(isRefreshing = false) }
@@ -147,6 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     viewModelScope.launch {
       val url = configRepository.fetchUrl()
+      SiteHosts.updateFromUrl(url)
       _uiState.update {
         it.copy(
           url = url,

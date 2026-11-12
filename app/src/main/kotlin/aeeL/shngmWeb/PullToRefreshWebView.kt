@@ -3,6 +3,7 @@ package aeeL.shngmWeb
 import android.content.Context
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -21,16 +22,16 @@ class PullToRefreshWebView(context: Context) : SwipeRefreshLayout(context) {
       ViewGroup.LayoutParams.MATCH_PARENT,
       ViewGroup.LayoutParams.MATCH_PARENT,
     )
-    setBackgroundColor(BACKGROUND)
+    setBackgroundColor(ContextCompat.getColor(context, R.color.base_dark))
   }
 
   init {
-    setBackgroundColor(BACKGROUND)
+    setBackgroundColor(ContextCompat.getColor(context, R.color.base_dark))
     addView(webView)
 
     setOnChildScrollUpCallback { _, _ -> webView.canScrollVertically(-1) }
-    setColorSchemeColors(ACCENT)
-    setProgressBackgroundColorSchemeColor(BACKGROUND_TOP)
+    setColorSchemeColors(ContextCompat.getColor(context, R.color.primary_500))
+    setProgressBackgroundColorSchemeColor(ContextCompat.getColor(context, R.color.base_bg))
 
     val density = resources.displayMetrics.density
     val defaultTop = statusBarHeight()
@@ -43,15 +44,15 @@ class PullToRefreshWebView(context: Context) : SwipeRefreshLayout(context) {
     }
   }
 
+  /** Keeps the pull-to-refresh chrome aligned with the current light/dark Material scheme. */
+  fun applyTheme(background: Int, progressBackground: Int, accent: Int) {
+    setBackgroundColor(background)
+    setProgressBackgroundColorSchemeColor(progressBackground)
+    setColorSchemeColors(accent)
+  }
+
   private fun statusBarHeight(): Int {
     val id = resources.getIdentifier("status_bar_height", "dimen", "android")
     return if (id > 0) resources.getDimensionPixelSize(id) else 0
-  }
-
-  companion object {
-    // Mirrors Primary500, BaseDark and BaseBg from the Shinigami palette.
-    private val ACCENT = 0xFF6F39EE.toInt()
-    private val BACKGROUND = 0xFF09090B.toInt()
-    private val BACKGROUND_TOP = 0xFF18181B.toInt()
   }
 }

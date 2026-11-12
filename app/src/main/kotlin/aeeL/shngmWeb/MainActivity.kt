@@ -22,7 +22,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -31,6 +30,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -100,10 +100,8 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    enableEdgeToEdge(
-      statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-      navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-    )
+    // Let the system pick light or dark bar icons so the app can follow the system theme.
+    enableEdgeToEdge()
 
     // The status bar stays hidden; a swipe can still reveal it temporarily.
     WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -148,7 +146,8 @@ class MainActivity : ComponentActivity() {
 
   @SuppressLint("SetJavaScriptEnabled")
   fun configureWebView(webView: WebView) {
-    webView.setBackgroundColor(android.graphics.Color.parseColor("#09090B"))
+    // The wrapped site is dark-only, so its canvas stays dark even when app chrome is light.
+    webView.setBackgroundColor(ContextCompat.getColor(webView.context, R.color.base_dark))
     webView.settings.apply {
       javaScriptEnabled = true
       domStorageEnabled = true
@@ -233,10 +232,27 @@ class MainActivity : ComponentActivity() {
     onBackPressedDispatcher.addCallback(this) {
       when {
         popupWebView != null -> dismissPopup()
-        mainWebView?.canGoBack() == true -> mainWebView?.goBack()
+        mainWebView?.canGoBack() == true -> goBackWithZoom()
         else -> confirmExit()
       }
     }
+  }
+
+  /**
+   * Applies the destination's zoom state before goBack(), so the previous page never renders for
+   * a frame with the wrong pinch-zoom setting.
+   */
+  private fun goBackWithZoom() {
+    val webView = mainWebView ?: return
+    val history = webView.copyBackForwardList()
+    val targetIndex = history.currentIndex - 1
+    val targetUrl = if (targetIndex in 0 until history.size) {
+      history.getItemAtIndex(targetIndex)?.url
+    } else {
+      null
+    }
+    WebViewZoom.apply(webView, targetUrl)
+    webView.goBack()
   }
 
   private fun confirmExit() {
@@ -459,7 +475,8 @@ class MainActivity : ComponentActivity() {
       ViewGroup.LayoutParams.MATCH_PARENT,
     )
     configureWebView(this)
-    webViewClient = AppWebViewClient(this@MainActivity, trackPageState)
+    // Popup image viewers keep zoom disabled; only the main reading WebView follows chapter URLs.
+    webViewClient = AppWebViewClient(this@MainActivity, trackPageState, manageZoom = trackPageState)
     webChromeClient = AppChromeClient(this@MainActivity, trackPageState)
   }
 
@@ -496,6 +513,8 @@ class MainActivity : ComponentActivity() {
     super.onPause()
     mainWebView?.onPause()
     popupWebView?.onPause()
+    // The website stores the session in cookies; persist them before the process can be killed.
+    CookieManager.getInstance().flush()
   }
 
   override fun onResume() {
@@ -528,6 +547,7 @@ class MainActivity : ComponentActivity() {
   class AppWebViewClient(
     activity: MainActivity,
     private val trackPageState: Boolean = true,
+    private val manageZoom: Boolean = trackPageState,
   ) : WebViewClient() {
     private val activityRef = WeakReference(activity)
 
@@ -542,7 +562,13 @@ class MainActivity : ComponentActivity() {
       val url = request.url
       val scheme = url.scheme.orEmpty()
       if (scheme.equals("about", ignoreCase = true) || scheme.equals("data", ignoreCase = true)) return false
-      if (isInternalNavigation(url)) return false
+      if (isInternalNavigation(url)) {
+        if (isComicHost(url.host)) {
+          SiteHosts.updateFromUrl(url.toString())
+        }
+        if (manageZoom) WebViewZoom.apply(view, url.toString())
+        return false
+      }
 
       val activity = activityRef.get() ?: return false
       return try {
@@ -558,20 +584,33 @@ class MainActivity : ComponentActivity() {
       val scheme = uri.scheme ?: return false
       if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return false
 
-      // Keep the Google sign-in flow and every comic domain inside the WebView. The configured
-      // site URL can move to a new domain, so match the host family instead of a fixed list.
+      // Keep the Google sign-in flow and every comic mirror inside the WebView. SiteHosts learns
+      // the active host from the remote config and also recognizes shngm/shinigami mirror families.
       val host = uri.host ?: return false
-      return host.equals("accounts.google.com", ignoreCase = true) ||
-        host.contains("shinigami", ignoreCase = true) ||
-        host.contains("shngm", ignoreCase = true)
+      return host.equals("accounts.google.com", ignoreCase = true) || isComicHost(host)
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
       super.onPageStarted(view, url, favicon)
+      if (manageZoom && view != null) {
+        WebViewZoom.apply(view, url)
+      }
       if (trackPageState) activityRef.get()?.viewModel?.onPageStarted()
     }
 
+    override fun onPageCommitVisible(view: WebView?, url: String?) {
+      super.onPageCommitVisible(view, url)
+      if (manageZoom && view != null) WebViewZoom.apply(view, url)
+    }
+
+    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+      super.doUpdateVisitedHistory(view, url, isReload)
+      // SvelteKit uses the History API; onPageStarted is not guaranteed for in-app SPA routes.
+      if (manageZoom && view != null) WebViewZoom.sync(view, url)
+    }
+
     override fun onPageFinished(view: WebView, url: String) {
+      if (manageZoom) WebViewZoom.sync(view, url)
       if (trackPageState) activityRef.get()?.viewModel?.onPageFinished()
       ErudaConsole.inject(view)
     }
